@@ -1,0 +1,9 @@
+docs:
+    uvx --with pymdown-extensions --with mkdocs-material zensical serve
+
+docs-build:
+    uvx --with pymdown-extensions --with mkdocs-material zensical build
+
+pdf:
+    uvx --with mkdocs-material --with pymdown-extensions --with mkdocs-with-pdf mkdocs build
+    @echo "PDF generated at: primer-security-audit.pdf"

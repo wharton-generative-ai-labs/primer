@@ -1,0 +1,115 @@
+site_name: Primer Code Audit
+site_description: Security audit for Primer (Artifex) - AI vs Human review research for Wharton
+site_author: Lincoln Loop / Wharton
+copyright: Copyright &copy; 2026 Lincoln Loop / Wharton
+docs_dir: report
+
+nav:
+  - Code Audit: index.md
+  - Methodology:
+      - methodology/index.md
+      - Scope: methodology/scope.md
+      - Deployment Context: methodology/deployment-context.md
+  - Findings:
+      - findings/index.md
+      - 01. Secrets: findings/secrets.md
+      - 02. Authentication: findings/authentication.md
+      - 03. WebSockets: findings/websockets.md
+      - 04. API Security: findings/api-security.md
+      - 05. Adapters: findings/adapters.md
+      - 06. Dependencies: findings/dependencies.md
+      - 07. Configuration: findings/configuration.md
+      - 08. Data Handling: findings/data-handling.md
+      - 09. Code Quality: findings/code-quality.md
+      - 10. Frontend Security: findings/frontend-security.md
+      - 11. Frontend Code Quality: findings/frontend-code-quality.md
+  - Conclusions:
+      - Remediation: remediation.md
+      - Release Checklist: release-checklist.md
+      - AI vs Human Analysis: ai-vs-human-analysis.md
+      - Postmortem: postmortem.md
+  - Appendices:
+      - appendices/index.md
+      - AI Reviews:
+          - appendices/ai-reviews/index.md
+          - Secrets (Git History): appendices/ai-reviews/secrets-git-history-ai-review.md
+          - Secrets (Source Code): appendices/ai-reviews/secrets-source-code-ai-review.md
+          - Authentication: appendices/ai-reviews/auth-ai-review.md
+          - WebSockets: appendices/ai-reviews/websocket-ai-review.md
+          - API Security: appendices/ai-reviews/api-security-ai-review.md
+          - Adapters: appendices/ai-reviews/adapters-ai-review.md
+          - Licenses: appendices/ai-reviews/licenses-ai-review.md
+          - Configuration: appendices/ai-reviews/config-ai-review.md
+          - Data Handling: appendices/ai-reviews/data-handling-ai-review.md
+          - Code Quality: appendices/ai-reviews/code-quality-ai-review.md
+          - Frontend Quality: appendices/ai-reviews/frontend-quality-ai-review.md
+      - Human Reviews:
+          - appendices/human-reviews/index.md
+          - Secrets (Git History): appendices/human-reviews/secrets-git-history-human-review.md
+          - Secrets (Source Code): appendices/human-reviews/secrets-source-code-human-review.md
+          - Authentication: appendices/human-reviews/auth-human-review.md
+          - WebSockets: appendices/human-reviews/websocket-human-review.md
+          - API Security: appendices/human-reviews/api-security-human-review.md
+          - Adapters: appendices/human-reviews/adapters-human-review.md
+          - Licenses: appendices/human-reviews/licenses-human-review.md
+          - Configuration: appendices/human-reviews/config-human-review.md
+          - Data Handling: appendices/human-reviews/data-handling-human-review.md
+          - Code Quality: appendices/human-reviews/code-quality-human-review.md
+          - Frontend Security: appendices/human-reviews/frontend-security-human-review.md
+          - Frontend Quality: appendices/human-reviews/frontend-quality-human-review.md
+      - Automated Scans: appendices/automated-scans/index.md
+
+markdown_extensions:
+  - nl2br
+  - admonition
+  - abbr
+  - def_list
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.details
+  - pymdownx.tasklist:
+      custom_checkbox: false
+  - pymdownx.snippets:
+      auto_append:
+        - appendices/glossary.md
+  - pymdownx.tilde
+  - attr_list
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+theme:
+  name: material
+  language: en
+  features:
+    - content.code.copy
+    - content.code.select
+    - navigation.footer
+    - navigation.indexes
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+  palette:
+    - scheme: default
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+
+plugins:
+  - search
+  - with-pdf:
+      author: Lincoln Loop / Wharton
+      copyright: "2026"
+      cover_title: Primer Code Audit
+      cover_subtitle: AI vs Human Code Review Research
+      output_path: ../primer-code-audit.pdf

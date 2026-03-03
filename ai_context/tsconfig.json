@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "strict": false,
+    "noImplicitAny": false,
+    "noImplicitThis": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noImplicitReturns": false,
+    "jsx": "react"
+  },
+  "include": ["**/*"],
+  "exclude": []
+}
+
+

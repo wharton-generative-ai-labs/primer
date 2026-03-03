@@ -1,0 +1,48 @@
+{
+  "version": "1.0.0",
+  "title": "Component Demo Experience",
+  "description": "Phase 0 test experience for validating custom React components",
+  "created": "2025-01-05",
+  
+  "aiConfigurations": {
+    "default": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "api": "realtime",
+      "modalities": ["text", "audio"]
+    }
+  },
+  
+  "resources": {
+    "components": [
+      {
+        "id": "trig-triangle",
+        "name": "Trigonometry Triangle",
+        "description": "Interactive right triangle for practicing trigonometry",
+        "file": "resources/components/trig-triangle.jsx",
+        "requiredState": ["sideA", "angleC"],
+        "optionalState": ["showHint", "showSteps", "studentAnswer", "attempts"]
+      }
+    ],
+    "instructions": {
+      "agent": {
+        "demo-agent": "resources/instructions/agent/demo-agent.md"
+      }
+    }
+  },
+  
+  "agents": {
+    "demo-agent": {
+      "name": "Component Demo Agent",
+      "voice": "nova",
+      "publicDescription": "A test agent for validating custom components",
+      "type": "frontend",
+      "temperature": 0.7,
+      "toolGroups": ["builtin", "custom-component"],
+      "downstreamAgents": []
+    }
+  },
+  
+  "initialAgent": "demo-agent"
+}
+

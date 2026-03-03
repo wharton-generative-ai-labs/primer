@@ -1,0 +1,33 @@
+import './globals.css'
+import { NextAuthProvider } from './providers'
+import { Toaster } from "@/components/ui/toaster"
+
+export const metadata = {
+  title: 'Primer',
+  description: 'Open-source AI platform enabling educators to create interactive learning tools without coding. Transform teaching expertise into personalized simulations and tutors through natural language. Created by Wharton Generative AI Labs.',
+  icons: {
+    icon: '/images/favicon.png',
+  },
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+        <meta name="mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+      </head>
+      <body className="overscroll-none">
+        <NextAuthProvider>
+          {children}
+          <Toaster />
+        </NextAuthProvider>
+      </body>
+    </html>
+  )
+}

@@ -1,0 +1,11 @@
+# Run tests first
+echo "Running tests..."
+npm test -- --passWithNoTests || exit 1
+
+# Run the build
+echo "Building..."
+npm run build || exit 1
+
+# If build succeeds, bump version and add to staged changes
+new_version=$(npm run bump-version --silent)
+git add package.json
