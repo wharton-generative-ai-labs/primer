@@ -255,7 +255,7 @@ flowchart TB
 - Learn [How to Use Experiences](/user-guide/using-experiences) for interaction tips
 
 **Want to create experiences?**
-- Read [Creating Your First Experience](/developer/experiences/getting-started)
+- Read [Creating Your First Experience](/developer/guides/creating-first-experience)
 - Explore [Tools & Capabilities](/developer/architecture/tools-system) available to agents
 - Understand [Agent Design](/developer/architecture/agent-architecture) principles
 

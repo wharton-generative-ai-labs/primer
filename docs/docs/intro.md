@@ -62,7 +62,7 @@ Auto-generated API documentation from the TypeScript source code.
 ## Quick Links
 
 - **Getting Started**: Jump right in with our [User Guide](/user-guide/getting-started) or [Developer Setup](/developer/setup)
-- **Architecture**: Learn about Primer's [design philosophy](/developer/architecture/philosophy) and [architecture diagrams](/developer/architecture/diagrams)
+- **Architecture**: Learn about Primer's [design philosophy](/developer/architecture/philosophy) and [system overview](/developer/architecture/system-overview)
 - **Key Concepts**: Understand [agents, tools, and experiences](/user-guide/key-concepts)
 - **Contributing**: Want to contribute? Check out our [contributing guide](/developer/contributing)
 
@@ -85,4 +85,4 @@ Primer is open source software licensed under the [Mozilla Public License 2.0](h
 
 ---
 
-*Ready to explore? Start with [What is Primer?](/user-guide/what-is-primer) for a comprehensive introduction, or dive into the [Architecture Diagrams](/developer/architecture/diagrams) to see how it all fits together.*
+*Ready to explore? Start with [What is Primer?](/user-guide/what-is-primer) for a comprehensive introduction, or dive into the [System Overview](/developer/architecture/system-overview) to see how it all fits together.*

@@ -326,7 +326,7 @@ Each experience is self-contained:
 ## Next Steps
 
 - [Design Philosophy](/developer/architecture/philosophy) — Why we made these choices
-- [Architecture Diagrams](/developer/architecture/diagrams) — Visual representations
+- [System Overview](/developer/architecture/system-overview) — Visual representations
 - [Experience Format](/developer/architecture/experience-format) — Configuration details
 - [Tools System](/developer/architecture/tools-system) — How tools work
 - [Delegation](/developer/architecture/delegation) — Agent coordination

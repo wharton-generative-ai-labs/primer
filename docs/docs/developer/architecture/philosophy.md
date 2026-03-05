@@ -313,7 +313,7 @@ This is not merely using AI. This is building systems that think alongside us.
 ## Learn More
 
 - [Architecture Guide](/developer/architecture/architecture-guide) — Principles and tech stack
-- [Architecture Diagrams](/developer/architecture/diagrams) — Visual representations
+- [System Overview](/developer/architecture/system-overview) — Visual representations
 - [Tools System](/developer/architecture/tools-system) — Tool architecture
 - [Delegation](/developer/architecture/delegation) — Agent coordination
 

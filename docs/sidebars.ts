@@ -26,6 +26,7 @@ const sidebars: SidebarsConfig = {
         'user-guide/key-concepts',
         'user-guide/getting-started',
         'user-guide/using-experiences',
+        'user-guide/visual-guide',
       ],
     },
   ],
