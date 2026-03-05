@@ -676,7 +676,7 @@ export function DraggableWindow({ element, callbacks, children, icon }: Draggabl
           {/* Content area - interactive and selectable */}
           <div 
             ref={contentRef}
-            className="w-full overflow-hidden"
+            className="w-full overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-black/20 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-black/5 [&::-webkit-scrollbar-track]:rounded-full"
             style={{ 
               height: 'calc(100% - 24px)', // Account for compact header
               pointerEvents: dragging ? 'none' : 'auto',

@@ -182,7 +182,7 @@ export function SlideComponent({ id, title, content }: SlideComponentProps) {
       }}
     >
       <div className="px-4 py-4">
-        <div ref={contentRef} className="text-black text-sm md:text-base prose prose-slate prose-ul:list-disc prose-li:marker:text-black max-w-none [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:bg-black/20 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-track]:bg-black/5 [&::-webkit-scrollbar-track]:rounded-full [&_pre]:bg-transparent [&_pre]:p-0 [&_pre]:shadow-none [&_pre]:border-0">
+        <div ref={contentRef} className="text-black text-sm md:text-base prose prose-slate prose-ul:list-disc prose-li:marker:text-black max-w-none [&_pre]:bg-transparent [&_pre]:p-0 [&_pre]:shadow-none [&_pre]:border-0">
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             urlTransform={allowDataUrls}
