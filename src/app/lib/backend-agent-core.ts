@@ -156,7 +156,12 @@ export async function executeBackendAgent(
       toolContext
     );
 
-    // Track counts & consecutive failures
+    // Track counts & consecutive failures per round (not per call within a batch).
+    // Multiple failures of the same tool in a single batch count as one failed round,
+    // since the model hasn't seen the error feedback yet and can't self-correct.
+    const failedToolsThisRound = new Set<string>();
+    const succeededToolsThisRound = new Set<string>();
+
     for (let i = 0; i < currentResponse.tool_calls.length; i++) {
       const toolCall = currentResponse.tool_calls[i];
       const toolResponse = toolResponses[i];
@@ -167,28 +172,34 @@ export async function executeBackendAgent(
         try {
           const parsed = JSON.parse(toolResponse.content);
           if (parsed.status === 'error') {
-            const count = (toolFailureCount.get(toolName) || 0) + 1;
-            toolFailureCount.set(toolName, count);
-            if (count >= 3) {
-              logger.error(
-                { toolName, failureCount: count, agentName },
-                'Tool failed 3 consecutive times'
-              );
-              throw new Error(`Tool "${toolName}" failed 3 consecutive times`);
-            }
+            failedToolsThisRound.add(toolName);
           } else {
-            toolFailureCount.delete(toolName);
+            succeededToolsThisRound.add(toolName);
           }
-        } catch (e) {
-          // Re-throw our own errors; ignore JSON parse failures
-          if (
-            e instanceof Error &&
-            e.message.includes('failed 3 consecutive times')
-          ) {
-            throw e;
-          }
+        } catch {
+          // JSON parse failure — not a structured error, ignore
         }
       }
+    }
+
+    for (const toolName of failedToolsThisRound) {
+      if (succeededToolsThisRound.has(toolName)) {
+        toolFailureCount.delete(toolName);
+      } else {
+        const count = (toolFailureCount.get(toolName) || 0) + 1;
+        toolFailureCount.set(toolName, count);
+        if (count >= 3) {
+          logger.error(
+            { toolName, failureCount: count, agentName },
+            'Tool failed 3 consecutive rounds'
+          );
+          throw new Error(`Tool "${toolName}" failed 3 consecutive rounds`);
+        }
+      }
+    }
+
+    for (const toolName of succeededToolsThisRound) {
+      toolFailureCount.delete(toolName);
     }
 
     allMessages.push(...toolResponses);

@@ -278,6 +278,7 @@ export interface ExperienceConfig {
   lastModified?: string; // ISO 8601 datetime when experience was last modified
   author?: string; // Name of the user who created the experience
   authorEmail?: string; // Email of the user who created the experience
+  usesComponents?: boolean; // If true, component libraries are bootstrapped even when no components are pre-defined (e.g., meta-experiences that create components at runtime)
   initialAgent?: string; // Key of the initial agent to start with
   resources: {
     scenes: Resource[];

@@ -280,6 +280,22 @@ class ComponentManager {
         defaultExportName = defaultFunctionMatch[1];
       }
       
+      // Check for: export default class ComponentName
+      if (!defaultExportName) {
+        const defaultClassMatch = jsxCode.match(/export\s+default\s+class\s+(\w+)/);
+        if (defaultClassMatch) {
+          defaultExportName = defaultClassMatch[1];
+        }
+      }
+      
+      // Check for: export default Identifier (arrow functions assigned to const/let/var)
+      if (!defaultExportName) {
+        const defaultIdentifierMatch = jsxCode.match(/export\s+default\s+([A-Z]\w*)\s*;/);
+        if (defaultIdentifierMatch) {
+          defaultExportName = defaultIdentifierMatch[1];
+        }
+      }
+      
       const cleanedCode = jsxCode
         .replace(/import\s+.*?from\s+['"].*?['"];?\s*/g, '')
         .replace(/export\s+default\s+/g, '')

@@ -203,12 +203,14 @@ function AppWrapper() {
           const response = await fetch(`/api/storage/${experienceId}/experience.json`);
           const config = await response.json();
           
-          // Enable components if either:
+          // Enable components if any of:
           // 1. Components already exist in the experience, OR
-          // 2. The custom-component plugin is enabled (allows dynamic creation)
+          // 2. The custom-component plugin is enabled (allows dynamic creation), OR
+          // 3. The experience declares usesComponents (e.g., meta-experiences that create components at runtime)
           const hasExistingComponents = !!config.resources?.components?.length;
           const hasCustomComponentPlugin = config.tools?.plugins?.includes('@primer/custom-component-plugin');
-          setHasComponents(hasExistingComponents || hasCustomComponentPlugin);
+          const usesComponents = !!config.usesComponents;
+          setHasComponents(hasExistingComponents || hasCustomComponentPlugin || usesComponents);
           
           // Check for README.md existence
           try {
