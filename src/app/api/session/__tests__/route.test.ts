@@ -76,7 +76,7 @@ describe('POST /api/session - GA Realtime client_secrets', () => {
       );
     });
 
-    it('wraps caller fields in the GA `session` shape (model, audio.output.voice, output_modalities)', async () => {
+    it('wraps caller fields in the GA `session` shape and translates modalities', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(buildGaResponse())
@@ -86,6 +86,7 @@ describe('POST /api/session - GA Realtime client_secrets', () => {
         method: 'POST',
         body: JSON.stringify({
           model: 'gpt-realtime-2',
+          // Legacy experience.json convention "I want both audio and text".
           modalities: ['text', 'audio'],
           voice: 'shimmer'
         })
@@ -99,9 +100,54 @@ describe('POST /api/session - GA Realtime client_secrets', () => {
           type: 'realtime',
           model: 'gpt-realtime-2',
           audio: { output: { voice: 'shimmer' } },
-          output_modalities: ['text', 'audio']
+          // GA only accepts ["text"] or ["audio"]; ["audio"] gives transcript free.
+          output_modalities: ['audio']
         }
       });
+    });
+
+    // Regression: GA endpoint rejects ["audio", "text"] with
+    //   "Invalid modalities: ['audio', 'text']. Supported combinations are:
+    //    ['text'] and ['audio']."
+    // The route translates the legacy convention into ["audio"].
+    it('translates legacy ["audio","text"] to GA ["audio"]', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(buildGaResponse())
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-realtime-2',
+          modalities: ['audio', 'text']
+        })
+      });
+
+      await POST(request);
+
+      const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(sentBody.session.output_modalities).toEqual(['audio']);
+    });
+
+    it('translates ["text"] only to GA ["text"]', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(buildGaResponse())
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-realtime-2',
+          modalities: ['text']
+        })
+      });
+
+      await POST(request);
+
+      const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(sentBody.session.output_modalities).toEqual(['text']);
     });
 
     it('forwards reasoning.effort to GA endpoint for reasoning-capable models (gpt-realtime-2)', async () => {

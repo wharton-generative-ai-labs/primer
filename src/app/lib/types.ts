@@ -152,6 +152,10 @@ export type ServerEvent = {
     type: string;
     code?: string;
     message: string;
+    // Field path on the offending event, e.g. "session.type". Sent by the
+    // GA Realtime API on `invalid_request_error` events; useful for logs and
+    // debug breadcrumbs so we can pinpoint which field the server rejected.
+    param?: string;
   };
 };
 

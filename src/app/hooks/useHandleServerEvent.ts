@@ -381,30 +381,41 @@ export function useHandleServerEvent({
           code: serverEvent.error?.code
         }, 'Server error');
         
-        // Handle different error types appropriately
+        // Handle different error types appropriately.
+        //
+        // Important: `setSessionStatus("DISCONNECTED")` here only flips React
+        // state — it does NOT tear down the WebRTC peer connection. So if the
+        // underlying connection is still healthy (audio/data channel still
+        // flowing), forcing the status to DISCONNECTED creates a split-brain:
+        // the user can keep talking to the agent but UI controls (mute,
+        // speaker, etc.) gated on `CONNECTED` disappear. Only flip to
+        // DISCONNECTED when we're confident the connection itself is dead.
         if (serverEvent.error?.type === 'authentication_error') {
-          // Authentication errors are critical - disconnect
+          // Authentication failures usually mean the ephemeral key is
+          // dead/expired — the connection cannot recover.
           setSessionStatus("DISCONNECTED");
         } else if (serverEvent.error?.type === 'invalid_request_error') {
-          // Check the specific error code for invalid_request_error
-          if (serverEvent.error?.code === 'conversation_already_has_active_response') {
-            // This is a recoverable error - just log it and continue
-            logger.warn({ code: serverEvent.error.code }, 'Conversation already has active response, recovering');
-            if (isDebugModeEnabled) {
-              addTranscriptBreadcrumb(
-                "Recoverable Error",
-                {
-                  type: serverEvent.error.type,
-                  code: serverEvent.error.code,
-                  message: serverEvent.error.message,
-                  action: "Recovered"
-                }
-              );
-            }
-          } else {
-            // Other invalid_request_error types may be critical
-            logger.error({ code: serverEvent.error?.code }, 'Critical invalid_request_error, disconnecting');
-            setSessionStatus("DISCONNECTED");
+          // `invalid_request_error` is the server rejecting a single client
+          // event (e.g. a malformed `session.update`). The peer connection
+          // itself stays open, so we log/breadcrumb but stay CONNECTED.
+          // Tearing the UI down here would mislead the user about the actual
+          // connection state.
+          logger.warn({
+            code: serverEvent.error?.code,
+            param: serverEvent.error?.param,
+            message: serverEvent.error?.message,
+          }, 'Server rejected a client event; connection still healthy');
+          if (isDebugModeEnabled) {
+            addTranscriptBreadcrumb(
+              "Recoverable Error",
+              {
+                type: serverEvent.error.type,
+                code: serverEvent.error.code,
+                param: serverEvent.error.param,
+                message: serverEvent.error.message,
+                action: "Continued (connection still open)"
+              }
+            );
           }
         } else {
           // For other error types, log but don't disconnect unless we know they're critical
@@ -451,11 +462,31 @@ export function useHandleServerEvent({
         break;
       }
 
-      case "response.audio_transcript.delta": {
+      // GA Realtime API renamed the audio-transcript streaming events:
+      //   legacy: response.audio_transcript.{delta,done}
+      //   GA:     response.output_audio_transcript.{delta,done}
+      // We handle both so non-GA realtime models (e.g. gpt-4o-realtime-preview)
+      // still produce transcripts. Without the GA handler, the message item
+      // gets created with an empty text and the conversation panel shows a
+      // timestamp with no body.
+      case "response.audio_transcript.delta":
+      case "response.output_audio_transcript.delta": {
         const itemId = serverEvent.item_id;
         const deltaText = serverEvent.delta || "";
         if (itemId) {
           updateTranscriptMessage(itemId, deltaText, true);
+        }
+        break;
+      }
+
+      case "response.output_audio_transcript.done": {
+        // Final, complete transcript for the audio output. We replace
+        // (append=false) to make sure the rendered text matches the
+        // server's authoritative version even if a delta got dropped.
+        const itemId = serverEvent.item_id;
+        const finalTranscript = serverEvent.transcript || "";
+        if (itemId && finalTranscript) {
+          updateTranscriptMessage(itemId, finalTranscript, false);
         }
         break;
       }
@@ -548,6 +579,20 @@ export function useHandleServerEvent({
       case "response.output_item.done": {
         const itemId = serverEvent.item?.id;
         if (itemId) {
+          // Safety net: if any streaming transcript deltas were missed
+          // (e.g. an event-name mismatch between legacy and GA), use the
+          // final text from the item's content array. GA content parts use
+          // `type: "output_audio"` (with `transcript`) or `type: "output_text"`
+          // (with `text`); legacy used `audio` / `text`. Both expose the same
+          // fields, so reading either works regardless of API generation.
+          const content = serverEvent.item?.content;
+          if (Array.isArray(content)) {
+            const finalText =
+              content[0]?.text || content[0]?.transcript || "";
+            if (finalText) {
+              updateTranscriptMessage(itemId, finalText, false);
+            }
+          }
           updateTranscriptItemStatus(itemId, "DONE");
         }
         break;

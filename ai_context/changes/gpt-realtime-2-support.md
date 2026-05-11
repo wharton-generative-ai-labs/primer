@@ -26,6 +26,7 @@ endpoints — calling the legacy endpoint with `gpt-realtime-2` returns:
 | Bootstrap body shape  | `{ model, modalities, voice }` | `{ session: { type:"realtime", model, audio:{output:{voice}}, output_modalities, reasoning:{effort} } }` |
 | Voice location        | top-level `voice` | `audio.output.voice` |
 | Modalities key        | `modalities` | `output_modalities` |
+| Modalities values     | `["audio", "text"]` meant "both" | only `["text"]` OR `["audio"]`; `["audio"]` already includes a transcript |
 | Ephemeral key in resp | `data.client_secret.value` | `data.value` |
 | `reasoning.effort`    | ❌ rejected | ✅ accepted |
 | `gpt-realtime-2`      | ❌ rejected | ✅ accepted |
@@ -75,6 +76,13 @@ and rebuilt the request body in the GA shape (`{ session: { type, model,
 audio: { output: { voice } }, output_modalities, reasoning } }`). Reasoning is
 forwarded only when present.
 
+GA's `output_modalities` only accepts `["text"]` OR `["audio"]`, not both —
+`["audio"]` already includes a transcript. Our existing `experience.json` files
+use the legacy convention `["audio", "text"]` to mean "give me both", so the
+route translates: if `audio` is in the requested list it sends `["audio"]`;
+otherwise `["text"]`. This avoids forcing every shipped experience.json to be
+edited.
+
 The route also normalizes the GA response (`{ value, expires_at, session }`)
 back to a legacy-compatible shape (`{ ..., client_secret: { value, expires_at } }`)
 so `useRealtimeConnection` and any other callers reading `data.client_secret.value`
@@ -95,11 +103,35 @@ session bootstrap.
 
 ### 5. Session updates (`src/app/hooks/useSessionManagement.ts`)
 
-Continues to inject `reasoning: { effort }` into the `session.update` event
-sent over the WebRTC data channel. This is intentional double-coverage: it
-ensures the effort survives agent switches (which trigger fresh `session.update`
-events without re-bootstrapping) and that any per-experience reasoning override
-is reapplied after a session.update for any other reason.
+The `session.update` event sent over the WebRTC data channel was migrated to
+the GA `RealtimeSessionCreateRequest` shape:
+
+- Added `session.type: "realtime"` (required by GA — server rejects with
+  `Missing required parameter: 'session.type'.` otherwise).
+- Moved flat audio fields under `audio.input.*` / `audio.output.*`:
+  - `voice` → `audio.output.voice`
+  - `input_audio_transcription` → `audio.input.transcription`
+  - `turn_detection` → `audio.input.turn_detection`
+- Dropped `modalities`, `input_audio_format`, and `output_audio_format` from
+  the patch. `session.update` is a true PATCH per OpenAI's docs ("Only the
+  fields that are present in the `session.update` are updated"), and these
+  fields are already set correctly during ephemeral key creation. Re-sending
+  the legacy `modalities: ["audio", "text"]` would also re-trigger the
+  `Invalid modalities` validation error since GA only accepts `["text"]` OR
+  `["audio"]`.
+- Dropped `temperature`. The GA Realtime API removed it from the session
+  schema (server returns `Unknown parameter: 'session.temperature'.`).
+  Reasoning-capable models use `reasoning.effort` to control variability
+  instead; non-reasoning GA models use a fixed default. `AgentConfig.temperature`
+  itself is preserved because non-realtime flows (text chat, config inspector,
+  etc.) still consume it.
+- `reasoning: { effort }` continues to be injected when the experience config
+  opts in. This is intentional double-coverage: GA accepts it on session
+  bootstrap, and re-sending it on every `session.update` ensures the effort
+  survives agent switches.
+
+To clear `turn_detection` on mute, we pass `null` per GA's "clearing fields"
+convention.
 
 ### 6. Tests (`src/app/api/session/__tests__/route.test.ts`)
 
@@ -123,6 +155,52 @@ Documented the `reasoningEffort` field on `AIConfiguration` and added a
 side-by-side example showing both a non-reasoning voice agent and a reasoning
 agent.
 
+### 8. Renamed transcript stream events (`src/app/hooks/useHandleServerEvent.ts`)
+
+GA renamed the audio-transcript streaming events on the server side:
+
+| Legacy                                  | GA                                              |
+|-----------------------------------------|-------------------------------------------------|
+| `response.audio_transcript.delta`       | `response.output_audio_transcript.delta`        |
+| `response.audio_transcript.done` (n/a)  | `response.output_audio_transcript.done`         |
+
+We previously only listened for the legacy names, so on GA models the
+streaming transcript chunks for assistant audio messages were silently
+dropped — the message item was created (timestamp visible in the conversation
+panel) but its body stayed empty. Added handlers for both new event names.
+The legacy cases are kept so non-GA realtime models (e.g. older preview
+models if/when they're used) keep working.
+
+We also enhanced the `response.output_item.done` handler with a safety net:
+if it sees a final text/transcript on `item.content[0]`, it persists it
+before marking the item DONE. This means a single missed delta no longer
+results in an empty message; the final text shape is the same on legacy
+(`type: "audio" | "text"`) and GA (`type: "output_audio" | "output_text"`),
+so reading `content[0]?.text || content[0]?.transcript` is API-agnostic.
+
+`response.output_text.delta` / `.done` were already handled under their GA
+names so no change was needed for text-only output.
+
+### 9. Error handling (`src/app/hooks/useHandleServerEvent.ts`)
+
+Fixed a split-brain UI bug surfaced by GA validation errors. The previous
+error handler called `setSessionStatus("DISCONNECTED")` for any
+`invalid_request_error` other than the `conversation_already_has_active_response`
+recoverable case. But that setter only flips React state — it does NOT close
+the WebRTC peer connection. So when OpenAI rejected a malformed client event
+(e.g. our pre-migration `session.update`), the audio path kept flowing while
+the UI controls gated on `CONNECTED` (mute, speaker, etc.) silently
+disappeared, leaving the user able to talk to the agent through controls
+that no longer existed.
+
+New behavior:
+
+- `authentication_error` → still flips to `DISCONNECTED` (key is dead).
+- `invalid_request_error` → log a warning + add a debug breadcrumb, but stay
+  `CONNECTED`. The peer connection is still healthy; we shouldn't lie to the
+  UI just because OpenAI rejected one event.
+- Other error types → unchanged (warn and continue).
+
 ## Things that did not need to change despite earlier guesses
 
 - **OpenAI npm SDK was not the problem.** We use `openai` (`^4.91.1`) only for
@@ -134,10 +212,12 @@ agent.
   ChatGPT-style answers that suggest sending `reasoning` to the legacy URL.
 - **The `session.update` event over the data channel uses the
   `RealtimeSessionCreateRequest` schema**, which DOES accept
-  `reasoning: { effort }` and is backward-compatible with the legacy field
-  layout (`modalities`, top-level `voice`, etc.). We left it on the legacy
-  layout to keep the diff small; if a future model rejects the legacy field
-  names there, we can migrate that event too.
+  `reasoning: { effort }`. Note: we initially assumed the legacy field layout
+  (`modalities`, top-level `voice`, flat `turn_detection`, etc.) would still
+  be accepted on this event for back-compat, but the GA server actually
+  requires the new layout — at minimum `session.type: "realtime"` — and
+  rejects the legacy modalities value. See section 5 above; this event was
+  migrated to the GA shape.
 
 ## Opt-in example
 
@@ -173,6 +253,7 @@ agent.
 - `src/app/lib/realtimeConnection.ts`
 - `src/app/hooks/useSessionManagement.ts`
 - `src/app/hooks/useRealtimeConnection.ts`
+- `src/app/hooks/useHandleServerEvent.ts`
 - `src/app/api/session/route.ts`
 - `src/app/api/session/__tests__/route.test.ts`
 - `ai_context/architecture/experience-format.md`

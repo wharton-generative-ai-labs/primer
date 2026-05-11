@@ -163,18 +163,47 @@ export function useSessionManagement({
     const reasoningEffort = selectedConfig?.reasoningEffort;
     const reasoning = reasoningEffort ? { effort: reasoningEffort } : undefined;
 
+    // GA Realtime API session.update shape:
+    //   - `session.type: "realtime"` is required (server rejects otherwise
+    //     with `Missing required parameter: 'session.type'.`).
+    //   - Audio config is nested under `audio.input` / `audio.output` rather
+    //     than the legacy flat fields (`voice`, `input_audio_format`,
+    //     `input_audio_transcription`, `turn_detection`).
+    //   - session.update is a true PATCH: only fields we send get updated,
+    //     so we omit `output_modalities` and audio formats that were already
+    //     set during ephemeral key creation.
+    //   - To clear `turn_detection` (e.g. on mute), pass `null` per the GA
+    //     "clearing fields" convention.
+    const audioInput = hasAudio
+      ? {
+          transcription: { model: "whisper-1" },
+          turn_detection: turnDetection,
+        }
+      : {
+          transcription: null,
+          turn_detection: null,
+        };
+
+    // Note: `temperature` is intentionally omitted. The GA Realtime API
+    // dropped it from the session schema (server returns
+    // `Unknown parameter: 'session.temperature'.` if sent). For reasoning
+    // models (e.g. gpt-realtime-2) use `reasoning.effort` to control output
+    // variability instead; non-reasoning GA models use a fixed default.
+    // `AgentConfig.temperature` is still consumed by non-realtime flows
+    // (text chat, etc.), so we keep it on the agent config — just don't
+    // forward it here.
     const sessionUpdateEvent = {
       type: "session.update",
       session: {
-        modalities: selectedConfig?.modalities || ["audio", "text"],
-        voice: currentAgent.voice || "alloy",
-        input_audio_format: "pcm16",
-        output_audio_format: "pcm16",
-        input_audio_transcription: hasAudio ? { model: "whisper-1" } : null,
-        turn_detection: hasAudio ? turnDetection : null,
+        type: "realtime",
         instructions: currentAgent.instructions,
-        temperature: currentAgent.temperature,
         tools: toolsForAI,
+        audio: {
+          input: audioInput,
+          output: {
+            voice: currentAgent.voice || "alloy",
+          },
+        },
         ...(reasoning ? { reasoning } : {}),
       },
     };

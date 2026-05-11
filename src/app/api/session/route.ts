@@ -48,9 +48,19 @@ export async function POST(request: Request) {
       session.audio = { output: { voice } };
     }
 
-    // GA shape: modalities is `output_modalities` (defaults to ["audio"]).
+    // GA shape: `output_modalities` only accepts `["text"]` OR `["audio"]`,
+    // not both — picking `["audio"]` already gives you a transcript for free.
+    // OpenAI rejects `["audio", "text"]` with:
+    //   "Invalid modalities: ['audio', 'text']. Supported combinations are:
+    //    ['text'] and ['audio']."
+    // Our experience.json files use the legacy convention `["audio", "text"]`
+    // to mean "I want both", so translate: if audio is requested, use
+    // `["audio"]`; otherwise `["text"]`. Omit when the caller did not ask
+    // (server defaults to `["audio"]`).
     if (Array.isArray(modalities) && modalities.length > 0) {
-      session.output_modalities = modalities;
+      session.output_modalities = modalities.includes("audio")
+        ? ["audio"]
+        : ["text"];
     }
 
     // Only meaningful for reasoning-capable models like gpt-realtime-2;
