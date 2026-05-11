@@ -6,16 +6,15 @@ const logger = createModuleLogger('session');
 
 export async function POST(request: Request) {
   try {
-    const { model, modalities, voice, reasoning } = await request.json();
+    const { model, modalities, voice } = await request.json();
 
-    // `reasoning` is only used by reasoning-capable realtime models such as
-    // gpt-realtime-2; older models (gpt-realtime-1.5, gpt-4o-realtime-preview)
-    // do not accept it. We forward it only when the caller provides it.
-    const body: Record<string, unknown> = { model, modalities, voice };
-    if (reasoning) {
-      body.reasoning = reasoning;
-    }
-
+    // NOTE: The legacy `POST /v1/realtime/sessions` REST endpoint accepts
+    // only a narrow set of bootstrap fields (model, modalities, voice). It
+    // does NOT accept `reasoning` even for reasoning-capable models like
+    // gpt-realtime-2 — sending it produces an "Unknown parameter: 'reasoning'"
+    // error. Reasoning effort must be set via `session.update` over the
+    // WebRTC data channel after the connection opens
+    // (handled in src/app/hooks/useSessionManagement.ts).
     const response = await fetch(
       "https://api.openai.com/v1/realtime/sessions",
       {
@@ -24,7 +23,11 @@ export async function POST(request: Request) {
           Authorization: `Bearer ${env.OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          model,
+          modalities,
+          voice,
+        }),
       }
     );
     const data = await response.json();

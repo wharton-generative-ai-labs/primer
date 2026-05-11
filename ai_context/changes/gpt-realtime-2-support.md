@@ -39,6 +39,30 @@ Per OpenAI's [realtime models prompting guide](https://developers.openai.com/api
 
 OpenAI recommends starting at `low` for production voice agents.
 
+## Where `reasoning.effort` is and isn't accepted
+
+This is the most important detail to get right and was a source of bugs:
+
+- ✅ **`session.update` event over the WebRTC data channel** — the
+  `RealtimeSessionCreateRequest` schema accepts `reasoning: { effort }` and
+  explicitly lists `gpt-realtime-2` among supported models.
+- ❌ **`POST /v1/realtime/sessions` (legacy REST bootstrap)** — uses an older,
+  narrower schema that does NOT accept `reasoning`. Sending it returns
+  `{ "error": { "message": "Unknown parameter: 'reasoning'.", "type":
+  "invalid_request_error", "param": "reasoning", "code": "unknown_parameter" } }`
+  even when the model is `gpt-realtime-2`.
+- ✅ **`response.create` event** — accepts a per-response `reasoning: { effort }`
+  override (not currently used by this codebase).
+
+The fix is therefore: configure reasoning effort exclusively via
+`session.update` after the data channel opens. The REST bootstrap continues to
+send only `model`, `modalities`, `voice`.
+
+> Heads up: ChatGPT-style answers will sometimes "helpfully" suggest sending
+> `reasoning` to `POST /v1/realtime/sessions`. The live OpenAI sessions
+> reference does not document `reasoning` there and the API rejects it. Trust
+> the API error and the schema reference, not the suggestion.
+
 ## Changes Made
 
 ### 1. Type definitions (`src/app/lib/types.ts`)
@@ -58,26 +82,22 @@ export interface AIConfiguration {
 ### 2. Session update event (`src/app/hooks/useSessionManagement.ts`)
 
 When the active AI configuration sets `reasoningEffort`, the `session.update`
-event sent over the WebRTC data channel now includes `reasoning: { effort }`.
-Non-reasoning models ignore this field, so it is safe for older models too — but
-we omit it entirely when unset to keep diffs against existing behavior minimal.
+event sent over the WebRTC data channel includes `reasoning: { effort }`. We
+omit it entirely when unset so non-reasoning model session updates are
+byte-identical to before.
 
-### 3. Ephemeral session creation
+### 3. Ephemeral session creation (`src/app/api/session/route.ts`, `src/app/hooks/useRealtimeConnection.ts`)
 
-`src/app/hooks/useRealtimeConnection.ts` forwards `reasoning: { effort }` to
-`/api/session` when the configuration sets it, and `src/app/api/session/route.ts`
-forwards the same field to OpenAI's `POST /v1/realtime/sessions`. The route only
-includes the field when present, so requests for non-reasoning models look
-identical to before.
+The REST bootstrap call to `POST /v1/realtime/sessions` deliberately does NOT
+forward `reasoning`. Both files include comments explaining why so future
+contributors don't add it back. The route also has a regression test pinning
+this behavior even if a caller mistakenly passes `reasoning` in the request body.
 
 ### 4. Tests (`src/app/api/session/__tests__/route.test.ts`)
 
-Added two cases:
-
-- `reasoning.effort` is forwarded when provided (gpt-realtime-2)
-- `reasoning` is omitted when not provided (gpt-realtime-1.5)
-
-Existing tests continue to pass unchanged.
+Added a regression case asserting the route does NOT forward `reasoning` to
+OpenAI even when the caller provides it (gpt-realtime-2). Existing tests
+continue to pass unchanged.
 
 ### 5. Documentation (`ai_context/architecture/experience-format.md`)
 

@@ -106,7 +106,13 @@ describe('POST /api/session - Integration Tests', () => {
       expect(requestBody.model).toBe('gpt-4o-realtime-preview-2024-12-17');
     });
 
-    it('should forward reasoning.effort when provided (gpt-realtime-2)', async () => {
+    // Regression: OpenAI's POST /v1/realtime/sessions REST endpoint rejects
+    // `reasoning` ("Unknown parameter: 'reasoning'", code: unknown_parameter)
+    // even for reasoning-capable models like gpt-realtime-2. Reasoning effort
+    // must be applied later via session.update over the data channel; the
+    // session bootstrap call must omit it. This test pins that contract so
+    // we don't regress and start sending it again.
+    it('should NOT forward reasoning to OpenAI even if caller passes it (gpt-realtime-2)', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ id: 'sess_reasoning' })
@@ -128,30 +134,6 @@ describe('POST /api/session - Integration Tests', () => {
       const requestBody = JSON.parse(fetchCall[1].body);
 
       expect(requestBody.model).toBe('gpt-realtime-2');
-      expect(requestBody.reasoning).toEqual({ effort: 'low' });
-    });
-
-    it('should omit reasoning when caller does not provide it (gpt-realtime-1.5)', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ id: 'sess_no_reasoning' })
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/session', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-realtime',
-          modalities: ['text', 'audio'],
-          voice: 'cedar'
-        })
-      });
-
-      await POST(request);
-
-      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
-      const requestBody = JSON.parse(fetchCall[1].body);
-
-      expect(requestBody.model).toBe('gpt-realtime');
       expect('reasoning' in requestBody).toBe(false);
     });
 
