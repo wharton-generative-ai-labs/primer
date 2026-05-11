@@ -424,6 +424,15 @@ export function useHandleServerEvent({
         break;
       }
 
+      // GA Realtime API introduced `conversation.item.added`, fired when a
+      // new item is added to the conversation (e.g., immediately after the
+      // input audio buffer commits — before the transcript exists). We
+      // handle it identically to the legacy `conversation.item.created`
+      // event so the user message item gets registered in the transcript
+      // panel; otherwise the later `input_audio_transcription.completed`
+      // update is a no-op (it can only update existing items) and the
+      // user's message never appears.
+      case "conversation.item.added":
       case "conversation.item.created": {
         const content = serverEvent.item?.content;
         let text = "";
@@ -447,6 +456,37 @@ export function useHandleServerEvent({
           }
           addTranscriptMessage(itemId, role, text);
         }
+        break;
+      }
+
+      // GA Realtime API: emitted when a conversation item is finalized. The
+      // event includes the full content of the item (transcript for audio,
+      // text for text). This is a defensive catch-all for both user and
+      // assistant items — if the `added` / `created` event was missed, or
+      // if streaming deltas didn't fire, this still surfaces the message
+      // with its final text. Idempotent with the other handlers thanks to
+      // the existence check inside `addTranscriptMessage` and the no-op
+      // behavior of `updateTranscriptMessage` when nothing changed.
+      case "conversation.item.done": {
+        const item = serverEvent.item;
+        const itemId = item?.id;
+        const role = item?.role as "user" | "assistant" | "system" | undefined;
+        if (!itemId || !role || role === "system") {
+          break;
+        }
+
+        const content = item?.content;
+        const finalText = Array.isArray(content)
+          ? content[0]?.text || content[0]?.transcript || ""
+          : "";
+
+        const exists = transcriptItems.some((t) => t.itemId === itemId);
+        if (!exists) {
+          addTranscriptMessage(itemId, role, finalText);
+        } else if (finalText) {
+          updateTranscriptMessage(itemId, finalText, false);
+        }
+        updateTranscriptItemStatus(itemId, "DONE");
         break;
       }
 

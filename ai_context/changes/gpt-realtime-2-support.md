@@ -155,28 +155,41 @@ Documented the `reasoningEffort` field on `AIConfiguration` and added a
 side-by-side example showing both a non-reasoning voice agent and a reasoning
 agent.
 
-### 8. Renamed transcript stream events (`src/app/hooks/useHandleServerEvent.ts`)
+### 8. Renamed/added transcript events (`src/app/hooks/useHandleServerEvent.ts`)
 
-GA renamed the audio-transcript streaming events on the server side:
+GA changed several event names and added new lifecycle events:
 
-| Legacy                                  | GA                                              |
-|-----------------------------------------|-------------------------------------------------|
-| `response.audio_transcript.delta`       | `response.output_audio_transcript.delta`        |
-| `response.audio_transcript.done` (n/a)  | `response.output_audio_transcript.done`         |
+| Concern                                | Legacy                                  | GA                                              |
+|----------------------------------------|-----------------------------------------|-------------------------------------------------|
+| Assistant audio transcript stream      | `response.audio_transcript.delta`       | `response.output_audio_transcript.delta`        |
+| Assistant audio transcript final       | (n/a — only used `output_item.done`)    | `response.output_audio_transcript.done`         |
+| Item added to conversation             | `conversation.item.created`             | `conversation.item.added` *(new)*               |
+| Item finalized in conversation         | (n/a)                                   | `conversation.item.done` *(new)*                |
 
-We previously only listened for the legacy names, so on GA models the
-streaming transcript chunks for assistant audio messages were silently
-dropped — the message item was created (timestamp visible in the conversation
-panel) but its body stayed empty. Added handlers for both new event names.
-The legacy cases are kept so non-GA realtime models (e.g. older preview
-models if/when they're used) keep working.
+We previously only listened for the legacy names, which produced two
+separate symptoms on GA:
 
-We also enhanced the `response.output_item.done` handler with a safety net:
-if it sees a final text/transcript on `item.content[0]`, it persists it
-before marking the item DONE. This means a single missed delta no longer
-results in an empty message; the final text shape is the same on legacy
-(`type: "audio" | "text"`) and GA (`type: "output_audio" | "output_text"`),
-so reading `content[0]?.text || content[0]?.transcript` is API-agnostic.
+1. **Assistant text didn't render**: the message item was created (timestamp
+   visible in the conversation panel) but its body stayed empty because the
+   streaming transcript chunks were silently dropped.
+2. **User transcripts didn't render at all**: GA only fires
+   `conversation.item.added` (not `created`) when the input audio buffer
+   commits, so the user message item was never registered in the transcript.
+   The later `input_audio_transcription.completed` update was a no-op
+   because `updateTranscriptMessage` only updates existing items.
+
+Fixes:
+
+- Added `response.output_audio_transcript.delta` and `.done` handlers
+  (kept the legacy names as fall-throughs for non-GA models).
+- Made `conversation.item.added` and `conversation.item.created` share the
+  same handler.
+- Added a `conversation.item.done` handler as a defensive catch-all: if an
+  item ever slips through without being added, this creates it with its
+  final text from `item.content[0]?.text || .transcript` (the field shape
+  is the same across legacy `audio`/`text` and GA `output_audio`/`output_text`/`input_audio`).
+- Enhanced `response.output_item.done` with the same safety net so a single
+  dropped delta no longer leaves the message body blank.
 
 `response.output_text.delta` / `.done` were already handled under their GA
 names so no change was needed for text-only output.
