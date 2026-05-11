@@ -55,10 +55,12 @@ export function useRealtimeConnection({
     const currentAgent = agents[selectedAgentKey];
     const selectedConfig = aiConfigurations[selectedAgentAiConfiguration] || aiConfigurations.default;
     
-    // NOTE: We deliberately do NOT send `reasoning` here. The legacy
-    // `POST /v1/realtime/sessions` REST endpoint only accepts the narrow
-    // set of bootstrap fields below; reasoning effort is applied later via
-    // `session.update` over the data channel (see useSessionManagement.ts).
+    // The GA Realtime API (POST /v1/realtime/client_secrets) accepts
+    // `reasoning: { effort }` on the session config, so we forward it here
+    // when the experience opts in. useSessionManagement also re-sends it
+    // in the data-channel session.update so it survives agent switches.
+    const reasoningEffort = selectedConfig?.reasoningEffort;
+
     const response = await fetch("/api/session", {
       method: "POST",
       headers: {
@@ -68,6 +70,7 @@ export function useRealtimeConnection({
         model: selectedConfig?.model,
         modalities: selectedConfig?.modalities,
         voice: currentAgent?.voice || "ballad",
+        ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       })
     });
     const data = await response.json();

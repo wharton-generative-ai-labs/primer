@@ -4,8 +4,12 @@ export async function createRealtimeConnection(
   EPHEMERAL_KEY: string,
   audioElement: RefObject<HTMLAudioElement | null>,
   hasAudio: boolean = true,
-  model: string = "gpt-4o-realtime-preview"
+  // The model parameter is no longer used by the GA endpoint (the model is
+  // bound to the ephemeral key by /v1/realtime/client_secrets) but is kept
+  // in the signature for backwards compatibility with existing callers.
+  _model: string = "gpt-realtime"
 ): Promise<{ pc: RTCPeerConnection; dc: RTCDataChannel }> {
+  void _model;
   const pc = new RTCPeerConnection();
 
   if (hasAudio) {
@@ -30,9 +34,12 @@ export async function createRealtimeConnection(
 
   await pc.setLocalDescription(offer);
 
-  const baseUrl = "https://api.openai.com/v1/realtime";
-
-  const sdpResponse = await fetch(`${baseUrl}?model=${model}`, {
+  // GA Realtime WebRTC endpoint. The legacy POST /v1/realtime?model=...
+  // path does not support newer models like gpt-realtime-2; the GA endpoint
+  // is /v1/realtime/calls and the model is already bound to the ephemeral
+  // key by /v1/realtime/client_secrets, so no `?model=` query is needed.
+  // See: https://developers.openai.com/api/docs/guides/realtime-webrtc
+  const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",
     body: offer.sdp,
     headers: {

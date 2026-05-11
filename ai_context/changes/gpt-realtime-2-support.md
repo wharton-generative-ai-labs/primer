@@ -1,77 +1,66 @@
-# gpt-realtime-2 Support
+# gpt-realtime-2 Support (GA Realtime API migration)
 
 ## Summary
 
-Added support for OpenAI's `gpt-realtime-2` reasoning-capable realtime model
-without changing defaults for existing experiences. The model can now be selected
-in any `aiConfigurations` entry, and its new session-level `reasoning.effort`
-parameter is configurable via a `reasoningEffort` field in `experience.json`.
+Added support for OpenAI's `gpt-realtime-2` reasoning-capable realtime model.
+This required migrating from the legacy Realtime preview/beta REST endpoints
+to the GA Realtime API endpoints, and adding a `reasoningEffort` configuration
+field that gets plumbed through `experience.json` to the OpenAI session config.
 
-## Background
+## Background: legacy vs GA Realtime API
 
-OpenAI's realtime model lineup currently includes:
+OpenAI ships two parallel HTTP surfaces for the Realtime API. They share the
+WebRTC data-channel event vocabulary, but the REST bootstrap and SDP-exchange
+endpoints are different. Newer models (`gpt-realtime-2`, `gpt-realtime-1.5`,
+`gpt-realtime`, `gpt-realtime-mini`, `gpt-audio-1.5`, etc.) are gated to the GA
+endpoints — calling the legacy endpoint with `gpt-realtime-2` returns:
 
-- `gpt-4o-realtime-preview` (and dated snapshots) — legacy preview, non-reasoning
-- `gpt-realtime` — alias that today resolves to `gpt-realtime-1.5`, non-reasoning
-- `gpt-realtime-1.5` — non-reasoning GA model
-- `gpt-realtime-2` — reasoning-capable; supports `reasoning.effort` and a 128k
-  context window; available on `/v1/realtime`, `/v1/realtime/translations`,
-  `/v1/realtime/transcription_sessions`, and `/v1/responses`
-- mini variants (`gpt-realtime-mini`, `gpt-audio-mini`, etc.)
+```
+"Model \"gpt-realtime-2\" is only available on the GA API."
+```
 
-The model name has always been an opaque string in our code path
-(`experience.json` → `ConfigLoader` → `useRealtimeConnection` → query string on
-`/v1/realtime`), so changing the model alone required no code change. The new
-behavior that did require plumbing was `reasoning.effort`, which is a session
-configuration field accepted by reasoning-capable realtime models.
+|                       | Legacy (preview/beta) | GA |
+|-----------------------|-----------------------|----|
+| Mint ephemeral key    | `POST /v1/realtime/sessions` | `POST /v1/realtime/client_secrets` |
+| WebRTC SDP exchange   | `POST /v1/realtime?model=...` | `POST /v1/realtime/calls` (no `?model=`) |
+| Bootstrap body shape  | `{ model, modalities, voice }` | `{ session: { type:"realtime", model, audio:{output:{voice}}, output_modalities, reasoning:{effort} } }` |
+| Voice location        | top-level `voice` | `audio.output.voice` |
+| Modalities key        | `modalities` | `output_modalities` |
+| Ephemeral key in resp | `data.client_secret.value` | `data.value` |
+| `reasoning.effort`    | ❌ rejected | ✅ accepted |
+| `gpt-realtime-2`      | ❌ rejected | ✅ accepted |
+
+References:
+- [`gpt-realtime-2` model page](https://developers.openai.com/api/docs/models/gpt-realtime-2)
+- [Realtime models prompting guide](https://developers.openai.com/api/docs/guides/realtime-models-prompting)
+- [Client Secrets reference](https://developers.openai.com/api/reference/resources/realtime/subresources/client_secrets/)
+- [Realtime API with WebRTC guide](https://developers.openai.com/api/docs/guides/realtime-webrtc)
 
 ## Reasoning effort levels
 
-Per OpenAI's [realtime models prompting guide](https://developers.openai.com/api/docs/guides/realtime-models-prompting):
+Per OpenAI's prompting guide, `gpt-realtime-2` accepts:
 
 | Effort    | Use when                                       |
 |-----------|------------------------------------------------|
 | `minimal` | Lowest latency matters most, task is simple    |
-| `low`     | Responsiveness plus basic reasoning            |
+| `low`     | Responsiveness plus basic reasoning (recommended starting point) |
 | `medium`  | Multi-step tasks                               |
 | `high`    | Deeper reasoning materially improves success   |
 | `xhigh`   | Maximum reasoning is worth the latency/cost    |
 
-OpenAI recommends starting at `low` for production voice agents.
-
-## Where `reasoning.effort` is and isn't accepted
-
-This is the most important detail to get right and was a source of bugs:
-
-- ✅ **`session.update` event over the WebRTC data channel** — the
-  `RealtimeSessionCreateRequest` schema accepts `reasoning: { effort }` and
-  explicitly lists `gpt-realtime-2` among supported models.
-- ❌ **`POST /v1/realtime/sessions` (legacy REST bootstrap)** — uses an older,
-  narrower schema that does NOT accept `reasoning`. Sending it returns
-  `{ "error": { "message": "Unknown parameter: 'reasoning'.", "type":
-  "invalid_request_error", "param": "reasoning", "code": "unknown_parameter" } }`
-  even when the model is `gpt-realtime-2`.
-- ✅ **`response.create` event** — accepts a per-response `reasoning: { effort }`
-  override (not currently used by this codebase).
-
-The fix is therefore: configure reasoning effort exclusively via
-`session.update` after the data channel opens. The REST bootstrap continues to
-send only `model`, `modalities`, `voice`.
-
-> Heads up: ChatGPT-style answers will sometimes "helpfully" suggest sending
-> `reasoning` to `POST /v1/realtime/sessions`. The live OpenAI sessions
-> reference does not document `reasoning` there and the API rejects it. Trust
-> the API error and the schema reference, not the suggestion.
+Older non-reasoning models (`gpt-realtime`, `gpt-realtime-1.5`, the
+`gpt-4o-realtime-preview` family) ignore the parameter.
 
 ## Changes Made
 
 ### 1. Type definitions (`src/app/lib/types.ts`)
 
-Added `RealtimeReasoningEffort` union and an optional `reasoningEffort` field on
-`AIConfiguration`:
+Added `RealtimeReasoningEffort` union and an optional `reasoningEffort` field
+on `AIConfiguration`:
 
 ```typescript
-export type RealtimeReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type RealtimeReasoningEffort =
+  'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface AIConfiguration {
   // ...existing fields
@@ -79,35 +68,78 @@ export interface AIConfiguration {
 }
 ```
 
-### 2. Session update event (`src/app/hooks/useSessionManagement.ts`)
+### 2. Session bootstrap (`src/app/api/session/route.ts`)
 
-When the active AI configuration sets `reasoningEffort`, the `session.update`
-event sent over the WebRTC data channel includes `reasoning: { effort }`. We
-omit it entirely when unset so non-reasoning model session updates are
-byte-identical to before.
+Migrated from `POST /v1/realtime/sessions` to `POST /v1/realtime/client_secrets`
+and rebuilt the request body in the GA shape (`{ session: { type, model,
+audio: { output: { voice } }, output_modalities, reasoning } }`). Reasoning is
+forwarded only when present.
 
-### 3. Ephemeral session creation (`src/app/api/session/route.ts`, `src/app/hooks/useRealtimeConnection.ts`)
+The route also normalizes the GA response (`{ value, expires_at, session }`)
+back to a legacy-compatible shape (`{ ..., client_secret: { value, expires_at } }`)
+so `useRealtimeConnection` and any other callers reading `data.client_secret.value`
+keep working without changes.
 
-The REST bootstrap call to `POST /v1/realtime/sessions` deliberately does NOT
-forward `reasoning`. Both files include comments explaining why so future
-contributors don't add it back. The route also has a regression test pinning
-this behavior even if a caller mistakenly passes `reasoning` in the request body.
+### 3. WebRTC SDP exchange (`src/app/lib/realtimeConnection.ts`)
 
-### 4. Tests (`src/app/api/session/__tests__/route.test.ts`)
+Migrated from `POST /v1/realtime?model=<model>` to `POST /v1/realtime/calls`
+(no `?model=` query parameter — the model is bound to the ephemeral key by the
+`client_secrets` call). The `model` argument to `createRealtimeConnection` is
+preserved in the function signature for back-compat but is no longer used.
 
-Added a regression case asserting the route does NOT forward `reasoning` to
-OpenAI even when the caller provides it (gpt-realtime-2). Existing tests
-continue to pass unchanged.
+### 4. Ephemeral-key forwarding (`src/app/hooks/useRealtimeConnection.ts`)
 
-### 5. Documentation (`ai_context/architecture/experience-format.md`)
+Now forwards `reasoning: { effort }` to `/api/session` when the experience's
+AI configuration sets `reasoningEffort`, since the GA endpoint accepts it on
+session bootstrap.
 
-Documented the `reasoningEffort` field on `AIConfiguration` and added an example
-configuration showing both a non-reasoning voice agent and a reasoning agent
-side-by-side.
+### 5. Session updates (`src/app/hooks/useSessionManagement.ts`)
+
+Continues to inject `reasoning: { effort }` into the `session.update` event
+sent over the WebRTC data channel. This is intentional double-coverage: it
+ensures the effort survives agent switches (which trigger fresh `session.update`
+events without re-bootstrapping) and that any per-experience reasoning override
+is reapplied after a session.update for any other reason.
+
+### 6. Tests (`src/app/api/session/__tests__/route.test.ts`)
+
+Rewrote the integration tests for the GA endpoint and shape:
+
+- Hits `POST /v1/realtime/client_secrets` with bearer auth
+- Wraps caller fields in the `session` shape (model, `audio.output.voice`,
+  `output_modalities`)
+- Forwards `reasoning.effort` for reasoning-capable models
+- Omits `reasoning` when not provided
+- Maps GA `value` onto legacy `client_secret.value` for backward compatibility
+- Preserves the full session config from the GA response
+- Error-handling cases (OpenAI errors, network errors, malformed body)
+
+11 tests pass; `tsc --noEmit`, `eslint`, and the related ConfigLoader/upgrade
+test suites are also green.
+
+### 7. Documentation (`ai_context/architecture/experience-format.md`)
+
+Documented the `reasoningEffort` field on `AIConfiguration` and added a
+side-by-side example showing both a non-reasoning voice agent and a reasoning
+agent.
+
+## Things that did not need to change despite earlier guesses
+
+- **OpenAI npm SDK was not the problem.** We use `openai` (`^4.91.1`) only for
+  non-realtime endpoints (image, vision, text, etc.). All realtime calls are
+  hand-rolled `fetch`. No SDK upgrade was needed.
+- **`reasoning` is not accepted on the legacy `/v1/realtime/sessions` REST
+  endpoint** even when the model is reasoning-capable. The GA endpoint accepts
+  it; the legacy one returns `Unknown parameter: 'reasoning'`. Be skeptical of
+  ChatGPT-style answers that suggest sending `reasoning` to the legacy URL.
+- **The `session.update` event over the data channel uses the
+  `RealtimeSessionCreateRequest` schema**, which DOES accept
+  `reasoning: { effort }` and is backward-compatible with the legacy field
+  layout (`modalities`, top-level `voice`, etc.). We left it on the legacy
+  layout to keep the diff small; if a future model rejects the legacy field
+  names there, we can migrate that event too.
 
 ## Opt-in example
-
-To use `gpt-realtime-2` with low reasoning effort in an experience:
 
 ```json
 {
@@ -124,31 +156,23 @@ To use `gpt-realtime-2` with low reasoning effort in an experience:
 }
 ```
 
-## What did NOT change
-
-- Default model in `realtimeConnection.ts` (`gpt-4o-realtime-preview`),
-  `ConfigLoader.ts`, and `ExperienceLoader.ts` — these are stale fallbacks but
-  changing them is out of scope for this work.
-- `storage/hal/experience.json` and other shipped experiences — none were
-  migrated to `gpt-realtime-2`. Authors can opt in per experience.
-- No UI was added; configuration is `experience.json`-only as requested.
-
 ## Backward compatibility
 
 - `reasoningEffort` is optional. Experiences that omit it behave exactly as
-  before.
-- The session route omits `reasoning` from the OpenAI request body when the
-  caller does not provide it, so requests against `gpt-realtime-1.5` and the
-  `gpt-4o-realtime-preview` family are byte-identical to the previous behavior.
+  before (no `reasoning` field is sent on the wire).
+- The session route still returns `data.client_secret.value` in addition to
+  the GA `data.value`, so any client code that reads the legacy path keeps
+  working.
+- `createRealtimeConnection`'s `model` parameter is preserved as a no-op for
+  call-site stability; it is no longer used since the GA endpoint binds the
+  model to the ephemeral key.
 
 ## Related Files
 
 - `src/app/lib/types.ts`
+- `src/app/lib/realtimeConnection.ts`
 - `src/app/hooks/useSessionManagement.ts`
 - `src/app/hooks/useRealtimeConnection.ts`
 - `src/app/api/session/route.ts`
 - `src/app/api/session/__tests__/route.test.ts`
 - `ai_context/architecture/experience-format.md`
-- OpenAI references:
-  - [`gpt-realtime-2` model page](https://developers.openai.com/api/docs/models/gpt-realtime-2)
-  - [Realtime models prompting guide](https://developers.openai.com/api/docs/guides/realtime-models-prompting)

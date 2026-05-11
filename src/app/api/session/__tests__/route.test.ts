@@ -1,13 +1,12 @@
 /**
  * Integration tests for /api/session route
- * Tests OpenAI Realtime API session creation
+ * Tests OpenAI GA Realtime API session bootstrap (POST /v1/realtime/client_secrets)
  * @jest-environment node
  */
 
 import { POST } from '../route';
 import { NextRequest } from 'next/server';
 
-// Mock the env module before importing the route
 jest.mock('@/config/env', () => ({
   env: {
     OPENAI_API_KEY: 'test-api-key',
@@ -15,10 +14,27 @@ jest.mock('@/config/env', () => ({
   }
 }));
 
-// Mock fetch globally
 global.fetch = jest.fn();
 
-describe('POST /api/session - Integration Tests', () => {
+const GA_ENDPOINT = 'https://api.openai.com/v1/realtime/client_secrets';
+
+// What OpenAI's GA /v1/realtime/client_secrets returns: ephemeral key at top
+// level under `value`, plus an `expires_at` and the effective `session` config.
+const buildGaResponse = (overrides: Record<string, unknown> = {}) => ({
+  value: 'ek_test_value',
+  expires_at: 1756310470,
+  session: {
+    id: 'sess_test',
+    object: 'realtime.session',
+    type: 'realtime',
+    model: 'gpt-realtime-2',
+    output_modalities: ['audio'],
+    audio: { output: { voice: 'cedar' } },
+  },
+  ...overrides,
+});
+
+describe('POST /api/session - GA Realtime client_secrets', () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
@@ -28,69 +44,48 @@ describe('POST /api/session - Integration Tests', () => {
   });
 
   describe('Successful Session Creation', () => {
-    it('should create a realtime session with valid parameters', async () => {
-      const mockSessionData = {
-        id: 'sess_123',
-        object: 'realtime.session',
-        model: 'gpt-4o-realtime-preview-2024-12-17',
-        modalities: ['text', 'audio'],
-        voice: 'alloy',
-        client_secret: {
-          value: 'secret_123',
-          expires_at: Date.now() + 60000
-        }
-      };
-
+    it('hits the GA /v1/realtime/client_secrets endpoint with bearer auth', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockSessionData)
+        json: () => Promise.resolve(buildGaResponse())
       });
 
       const request = new NextRequest('http://localhost:3000/api/session', {
         method: 'POST',
         body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
+          model: 'gpt-realtime-2',
           modalities: ['text', 'audio'],
-          voice: 'alloy'
+          voice: 'cedar'
         }),
-        headers: {
-          'content-type': 'application/json'
-        }
+        headers: { 'content-type': 'application/json' }
       });
 
       const response = await POST(request);
-      const data = await response.json();
-
       expect(response.status).toBe(200);
-      expect(data).toEqual(mockSessionData);
+
       expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.openai.com/v1/realtime/sessions',
+        GA_ENDPOINT,
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({
+          headers: {
             Authorization: 'Bearer test-api-key',
             'Content-Type': 'application/json'
-          }),
+          },
           body: expect.any(String)
         })
       );
     });
 
-    it('should pass through all modalities correctly', async () => {
-      const mockSessionData = {
-        id: 'sess_456',
-        modalities: ['text', 'audio']
-      };
-
+    it('wraps caller fields in the GA `session` shape (model, audio.output.voice, output_modalities)', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve(mockSessionData)
+        json: () => Promise.resolve(buildGaResponse())
       });
 
       const request = new NextRequest('http://localhost:3000/api/session', {
         method: 'POST',
         body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
+          model: 'gpt-realtime-2',
           modalities: ['text', 'audio'],
           voice: 'shimmer'
         })
@@ -98,24 +93,21 @@ describe('POST /api/session - Integration Tests', () => {
 
       await POST(request);
 
-      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
-      const requestBody = JSON.parse(fetchCall[1].body);
-      
-      expect(requestBody.modalities).toEqual(['text', 'audio']);
-      expect(requestBody.voice).toBe('shimmer');
-      expect(requestBody.model).toBe('gpt-4o-realtime-preview-2024-12-17');
+      const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(sentBody).toEqual({
+        session: {
+          type: 'realtime',
+          model: 'gpt-realtime-2',
+          audio: { output: { voice: 'shimmer' } },
+          output_modalities: ['text', 'audio']
+        }
+      });
     });
 
-    // Regression: OpenAI's POST /v1/realtime/sessions REST endpoint rejects
-    // `reasoning` ("Unknown parameter: 'reasoning'", code: unknown_parameter)
-    // even for reasoning-capable models like gpt-realtime-2. Reasoning effort
-    // must be applied later via session.update over the data channel; the
-    // session bootstrap call must omit it. This test pins that contract so
-    // we don't regress and start sending it again.
-    it('should NOT forward reasoning to OpenAI even if caller passes it (gpt-realtime-2)', async () => {
+    it('forwards reasoning.effort to GA endpoint for reasoning-capable models (gpt-realtime-2)', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ id: 'sess_reasoning' })
+        json: () => Promise.resolve(buildGaResponse())
       });
 
       const request = new NextRequest('http://localhost:3000/api/session', {
@@ -130,26 +122,44 @@ describe('POST /api/session - Integration Tests', () => {
 
       await POST(request);
 
-      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
-      const requestBody = JSON.parse(fetchCall[1].body);
-
-      expect(requestBody.model).toBe('gpt-realtime-2');
-      expect('reasoning' in requestBody).toBe(false);
+      const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect(sentBody.session.reasoning).toEqual({ effort: 'low' });
     });
 
-    it('should support different voice options', async () => {
-      const voices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+    it('omits reasoning when caller does not provide it (non-reasoning models)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(buildGaResponse())
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-realtime-1.5',
+          modalities: ['text', 'audio'],
+          voice: 'cedar'
+        })
+      });
+
+      await POST(request);
+
+      const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect('reasoning' in sentBody.session).toBe(false);
+    });
+
+    it('supports different voice options', async () => {
+      const voices = ['alloy', 'echo', 'cedar', 'marin', 'shimmer'];
 
       for (const voice of voices) {
         (global.fetch as jest.Mock).mockResolvedValue({
           ok: true,
-          json: () => Promise.resolve({ id: 'sess_test', voice })
+          json: () => Promise.resolve(buildGaResponse())
         });
 
         const request = new NextRequest('http://localhost:3000/api/session', {
           method: 'POST',
           body: JSON.stringify({
-            model: 'gpt-4o-realtime-preview-2024-12-17',
+            model: 'gpt-realtime-2',
             modalities: ['audio'],
             voice
           })
@@ -157,54 +167,111 @@ describe('POST /api/session - Integration Tests', () => {
 
         await POST(request);
 
-        const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
-        const requestBody = JSON.parse(fetchCall[1].body);
-        expect(requestBody.voice).toBe(voice);
+        const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+        expect(sentBody.session.audio.output.voice).toBe(voice);
 
         jest.clearAllMocks();
       }
     });
-  });
 
-  describe('Error Handling', () => {
-    it('should handle OpenAI API errors gracefully', async () => {
+    it('omits audio.output when no voice is provided', async () => {
       (global.fetch as jest.Mock).mockResolvedValue({
-        ok: false,
-        status: 401,
-        json: () => Promise.resolve({
-          error: {
-            message: 'Invalid API key',
-            type: 'invalid_request_error'
-          }
-        })
+        ok: true,
+        json: () => Promise.resolve(buildGaResponse())
       });
 
       const request = new NextRequest('http://localhost:3000/api/session', {
         method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
-          modalities: ['audio'],
-          voice: 'alloy'
-        })
+        body: JSON.stringify({ model: 'gpt-realtime-2' })
+      });
+
+      await POST(request);
+
+      const sentBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+      expect('audio' in sentBody.session).toBe(false);
+      expect('output_modalities' in sentBody.session).toBe(false);
+    });
+  });
+
+  describe('Response normalization', () => {
+    // useRealtimeConnection (and any other legacy callers) read
+    // `data.client_secret.value`. The GA endpoint puts the key at top-level
+    // `data.value`; the route maps the GA shape back so callers don't break.
+    it('maps GA `value` onto legacy `client_secret.value` for backward compatibility', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(buildGaResponse({
+          value: 'ek_abc123',
+          expires_at: 999
+        }))
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-realtime-2' })
       });
 
       const response = await POST(request);
       const data = await response.json();
 
-      // The route passes through the OpenAI response
-      expect(data.error).toBeDefined();
+      expect(data.value).toBe('ek_abc123');
+      expect(data.client_secret).toEqual({
+        value: 'ek_abc123',
+        expires_at: 999
+      });
     });
 
-    it('should handle network errors', async () => {
+    it('preserves the full session config from the GA response', async () => {
+      const gaResponse = buildGaResponse();
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve(gaResponse)
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-realtime-2' })
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(data.session).toEqual(gaResponse.session);
+    });
+  });
+
+  describe('Error Handling', () => {
+    it('passes OpenAI errors through without injecting a fake client_secret', async () => {
+      const errorPayload = {
+        error: {
+          message: 'Invalid API key',
+          type: 'invalid_request_error'
+        }
+      };
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 401,
+        json: () => Promise.resolve(errorPayload)
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-realtime-2' })
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(data.error).toBeDefined();
+      expect(data.client_secret).toBeUndefined();
+    });
+
+    it('handles network errors with a 500', async () => {
       (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
       const request = new NextRequest('http://localhost:3000/api/session', {
         method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
-          modalities: ['audio'],
-          voice: 'alloy'
-        })
+        body: JSON.stringify({ model: 'gpt-realtime-2' })
       });
 
       const response = await POST(request);
@@ -214,7 +281,7 @@ describe('POST /api/session - Integration Tests', () => {
       expect(data.error).toBe('Internal Server Error');
     });
 
-    it('should handle malformed request body', async () => {
+    it('handles malformed request body with a 500', async () => {
       const request = new NextRequest('http://localhost:3000/api/session', {
         method: 'POST',
         body: 'invalid json'
@@ -225,193 +292,6 @@ describe('POST /api/session - Integration Tests', () => {
 
       expect(response.status).toBe(500);
       expect(data.error).toBe('Internal Server Error');
-    });
-
-    it('should handle missing API key', async () => {
-      // Temporarily mock env with undefined API key
-      jest.resetModules();
-      jest.doMock('@/config/env', () => ({
-        env: {
-          OPENAI_API_KEY: undefined,
-          NODE_ENV: 'test'
-        }
-      }));
-
-      // Re-import the route with the new mock
-      const { POST: POSTWithoutKey } = await import('../route');
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: false,
-        status: 401,
-        json: () => Promise.resolve({
-          error: { message: 'Missing API key' }
-        })
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/session', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
-          modalities: ['audio'],
-          voice: 'alloy'
-        })
-      });
-
-      await POSTWithoutKey(request);
-      
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.openai.com/v1/realtime/sessions',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: 'Bearer undefined'
-          })
-        })
-      );
-      
-      // Restore the original mock
-      jest.resetModules();
-      jest.doMock('@/config/env', () => ({
-        env: {
-          OPENAI_API_KEY: 'test-api-key',
-          NODE_ENV: 'test'
-        }
-      }));
-    });
-  });
-
-  describe('Request Validation', () => {
-    it('should send request with correct headers', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ id: 'sess_test' })
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/session', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
-          modalities: ['audio'],
-          voice: 'alloy'
-        })
-      });
-
-      await POST(request);
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        'https://api.openai.com/v1/realtime/sessions',
-        expect.objectContaining({
-          method: 'POST',
-          headers: {
-            Authorization: 'Bearer test-api-key',
-            'Content-Type': 'application/json'
-          }
-        })
-      );
-    });
-
-    it('should correctly serialize request body', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ id: 'sess_test' })
-      });
-
-      const requestData = {
-        model: 'gpt-4o-realtime-preview-2024-12-17',
-        modalities: ['text', 'audio'],
-        voice: 'nova'
-      };
-
-      const request = new NextRequest('http://localhost:3000/api/session', {
-        method: 'POST',
-        body: JSON.stringify(requestData)
-      });
-
-      await POST(request);
-
-      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
-      const sentBody = JSON.parse(fetchCall[1].body);
-      
-      expect(sentBody).toEqual(requestData);
-    });
-  });
-
-  describe('Response Handling', () => {
-    it('should return complete session data from OpenAI', async () => {
-      const mockSessionData = {
-        id: 'sess_789',
-        object: 'realtime.session',
-        model: 'gpt-4o-realtime-preview-2024-12-17',
-        modalities: ['text', 'audio'],
-        instructions: '',
-        voice: 'alloy',
-        input_audio_format: 'pcm16',
-        output_audio_format: 'pcm16',
-        input_audio_transcription: null,
-        turn_detection: {
-          type: 'server_vad',
-          threshold: 0.5,
-          prefix_padding_ms: 300,
-          silence_duration_ms: 200
-        },
-        tools: [],
-        tool_choice: 'auto',
-        temperature: 0.8,
-        max_response_output_tokens: 'inf',
-        client_secret: {
-          value: 'secret_xyz',
-          expires_at: 1234567890
-        }
-      };
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockSessionData)
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/session', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
-          modalities: ['text', 'audio'],
-          voice: 'alloy'
-        })
-      });
-
-      const response = await POST(request);
-      const data = await response.json();
-
-      expect(data).toEqual(mockSessionData);
-      expect(data.client_secret).toBeDefined();
-      expect(data.client_secret.value).toBe('secret_xyz');
-    });
-
-    it('should preserve all response fields from OpenAI', async () => {
-      const mockResponse = {
-        id: 'sess_custom',
-        custom_field: 'custom_value',
-        nested: {
-          data: 'test'
-        }
-      };
-
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockResponse)
-      });
-
-      const request = new NextRequest('http://localhost:3000/api/session', {
-        method: 'POST',
-        body: JSON.stringify({
-          model: 'gpt-4o-realtime-preview-2024-12-17',
-          modalities: ['audio'],
-          voice: 'alloy'
-        })
-      });
-
-      const response = await POST(request);
-      const data = await response.json();
-
-      expect(data).toEqual(mockResponse);
     });
   });
 });
