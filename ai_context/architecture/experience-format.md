@@ -149,13 +149,16 @@ interface RealtimeSettings {
   interrupt_response?: boolean;  // Auto-interrupt response on VAD start (default: true)
 }
 
+type RealtimeReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
 interface AIConfiguration {
   provider: 'openai' | 'anthropic';
   model: string;
   api?: 'realtime' | 'responses';
   streaming?: boolean;
   modalities?: string[];
-  realtimeSettings?: RealtimeSettings;  // Only used when api === 'realtime'
+  realtimeSettings?: RealtimeSettings;        // Only used when api === 'realtime'
+  reasoningEffort?: RealtimeReasoningEffort;  // Only used by reasoning-capable models (e.g., gpt-realtime-2)
 }
 ```
 
@@ -179,6 +182,17 @@ interface AIConfiguration {
 - `interrupt_response`: Allow user to interrupt agent (default: true)
   - Set to false to prevent interruptions during agent responses
 
+**Reasoning Effort** (for reasoning-capable realtime models):
+
+- `reasoningEffort`: One of `minimal`, `low`, `medium`, `high`, `xhigh`
+  - Trades latency for deeper reasoning before the model speaks or calls tools
+  - Only honored by reasoning-capable models such as `gpt-realtime-2`; ignored by
+    `gpt-realtime-1.5`, `gpt-realtime` (alias), and the `gpt-4o-realtime-preview` family
+  - OpenAI recommends starting at `low` for production voice agents and tuning up
+    only when deeper planning materially improves success
+  - Tune the prompt as well: tell the model when to reason vs respond directly
+    (see OpenAI's [realtime models prompting guide](https://developers.openai.com/api/docs/guides/realtime-models-prompting))
+
 **Example:**
 
 ```json
@@ -196,6 +210,17 @@ interface AIConfiguration {
         "prefix_padding_ms": 300,
         "create_response": true,
         "interrupt_response": true
+      }
+    },
+    "voice-reasoning": {
+      "provider": "openai",
+      "api": "realtime",
+      "model": "gpt-realtime-2",
+      "streaming": true,
+      "modalities": ["audio", "text"],
+      "reasoningEffort": "low",
+      "realtimeSettings": {
+        "silence_duration_ms": 800
       }
     }
   }

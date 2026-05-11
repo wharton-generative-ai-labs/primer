@@ -237,6 +237,11 @@ export interface RealtimeSettings {
   interrupt_response?: boolean;  // Auto-interrupt response on VAD start (default: true)
 }
 
+// Reasoning effort levels supported by OpenAI's reasoning-capable realtime
+// models (e.g., gpt-realtime-2). Trades latency for deeper reasoning.
+// See: https://developers.openai.com/api/docs/guides/realtime-models-prompting
+export type RealtimeReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+
 export interface AIConfiguration {
   provider: string;
   api: string;
@@ -245,6 +250,10 @@ export interface AIConfiguration {
   streaming: boolean;
   modalities: string[];
   realtimeSettings?: RealtimeSettings;  // Only used when api === 'realtime'
+  // Reasoning effort for reasoning-capable realtime/responses models
+  // (e.g., gpt-realtime-2). Ignored by non-reasoning models such as
+  // gpt-realtime-1.5 and the gpt-4o-realtime-preview family.
+  reasoningEffort?: RealtimeReasoningEffort;
 }
 
 export type ArtifactType = 'markdown' | 'checklist';

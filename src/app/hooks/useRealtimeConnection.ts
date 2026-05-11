@@ -55,6 +55,12 @@ export function useRealtimeConnection({
     const currentAgent = agents[selectedAgentKey];
     const selectedConfig = aiConfigurations[selectedAgentAiConfiguration] || aiConfigurations.default;
     
+    // For reasoning-capable models (e.g., gpt-realtime-2) the session can be
+    // created with a default reasoning effort. The same value is also resent
+    // in session.update by useSessionManagement so it survives reconnects and
+    // agent switches.
+    const reasoningEffort = selectedConfig?.reasoningEffort;
+
     const response = await fetch("/api/session", {
       method: "POST",
       headers: {
@@ -64,6 +70,7 @@ export function useRealtimeConnection({
         model: selectedConfig?.model,
         modalities: selectedConfig?.modalities,
         voice: currentAgent?.voice || "ballad",
+        ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       })
     });
     const data = await response.json();

@@ -106,6 +106,55 @@ describe('POST /api/session - Integration Tests', () => {
       expect(requestBody.model).toBe('gpt-4o-realtime-preview-2024-12-17');
     });
 
+    it('should forward reasoning.effort when provided (gpt-realtime-2)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ id: 'sess_reasoning' })
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-realtime-2',
+          modalities: ['text', 'audio'],
+          voice: 'cedar',
+          reasoning: { effort: 'low' }
+        })
+      });
+
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body);
+
+      expect(requestBody.model).toBe('gpt-realtime-2');
+      expect(requestBody.reasoning).toEqual({ effort: 'low' });
+    });
+
+    it('should omit reasoning when caller does not provide it (gpt-realtime-1.5)', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ id: 'sess_no_reasoning' })
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({
+          model: 'gpt-realtime',
+          modalities: ['text', 'audio'],
+          voice: 'cedar'
+        })
+      });
+
+      await POST(request);
+
+      const fetchCall = (global.fetch as jest.Mock).mock.calls[0];
+      const requestBody = JSON.parse(fetchCall[1].body);
+
+      expect(requestBody.model).toBe('gpt-realtime');
+      expect('reasoning' in requestBody).toBe(false);
+    });
+
     it('should support different voice options', async () => {
       const voices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
 

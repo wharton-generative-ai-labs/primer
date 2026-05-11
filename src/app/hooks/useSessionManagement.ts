@@ -157,6 +157,12 @@ export function useSessionManagement({
         interrupt_response: realtimeSettings?.interrupt_response ?? true,
       };
 
+    // Reasoning-capable realtime models (e.g., gpt-realtime-2) accept a
+    // `reasoning.effort` setting at session level. Only included when the
+    // experience config opts in; non-reasoning models will ignore it.
+    const reasoningEffort = selectedConfig?.reasoningEffort;
+    const reasoning = reasoningEffort ? { effort: reasoningEffort } : undefined;
+
     const sessionUpdateEvent = {
       type: "session.update",
       session: {
@@ -169,6 +175,7 @@ export function useSessionManagement({
         instructions: currentAgent.instructions,
         temperature: currentAgent.temperature,
         tools: toolsForAI,
+        ...(reasoning ? { reasoning } : {}),
       },
     };
 
