@@ -34,6 +34,30 @@ export async function createRealtimeConnection(
 
   await pc.setLocalDescription(offer);
 
+  // Wait for ICE candidate gathering to complete before sending the offer.
+  // Chrome gathers candidates inline so skipping this works there, but
+  // Firefox gathers asynchronously — sending an incomplete SDP can cause
+  // ICE negotiation to use sub-optimal or missing candidates. Cap at 3 s
+  // so a broken network environment can't stall indefinitely.
+  if (pc.iceGatheringState !== "complete") {
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        pc.removeEventListener("icegatheringstatechange", onStateChange);
+        resolve();
+      }, 3000);
+
+      function onStateChange() {
+        if (pc.iceGatheringState === "complete") {
+          clearTimeout(timeout);
+          pc.removeEventListener("icegatheringstatechange", onStateChange);
+          resolve();
+        }
+      }
+
+      pc.addEventListener("icegatheringstatechange", onStateChange);
+    });
+  }
+
   // GA Realtime WebRTC endpoint. The legacy POST /v1/realtime?model=...
   // path does not support newer models like gpt-realtime-2; the GA endpoint
   // is /v1/realtime/calls and the model is already bound to the ephemeral
@@ -41,7 +65,9 @@ export async function createRealtimeConnection(
   // See: https://developers.openai.com/api/docs/guides/realtime-webrtc
   const sdpResponse = await fetch("https://api.openai.com/v1/realtime/calls", {
     method: "POST",
-    body: offer.sdp,
+    // Use the live localDescription (includes all gathered ICE candidates)
+    // rather than the original offer snapshot.
+    body: pc.localDescription!.sdp,
     headers: {
       Authorization: `Bearer ${EPHEMERAL_KEY}`,
       "Content-Type": "application/sdp",
