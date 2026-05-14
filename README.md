@@ -186,24 +186,17 @@ Start your Experience by entering the URL of:
 - a zip file, containing an Experience config file, and resources.
 
 ## Config Structure
-Experiences are self-contained. See [Experience Specification](ExperienceSpecification.md).
+Experiences are self-contained. See the Developer Setup Guide for experience specification details.
 
 ## Documentation
 
-Examine the /context folder for detailed notes on the architecture and development of Primer.
-
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and recent changes
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to the project
-- **[Context Documentation for AI Assistants](ai_context/)** - Architecture, guides, and references
 
 ## Development Process & Acknowledgments
-This project was developed through human-AI pair programming, with architectural and refactoring decisions made in collaboration with Claude (Anthropic). A detailed whitepaper analyzing this collaboration process and its impact on the development workflow is forthcoming.
-
-When published, the whitepaper will be accessible at: [Developing with AI][whitepaper-link].
+This project was developed through human-AI pair programming, with architectural and refactoring decisions made in collaboration with Claude (Anthropic).
 
 We gratefully acknowledge design and code contributions from [Lincoln Loop](https://lincolnloop.com/), and the example realtime API project by [OpenAI](https://github.com/openai/openai-realtime-agents).
-
-[whitepaper-link]: #
 
 ## Contact
 

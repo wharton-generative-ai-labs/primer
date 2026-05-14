@@ -9,44 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## Version History
+## [0.1.0] - Initial Release
 
-### [0.1.0] - Initial Release
-- Initial codebase structure
+- Initial open source release
 - Experience management system
+- Realtime voice interaction via OpenAI's Realtime API
+- Agent sequencing and branching
+- Plugin-based tool system
 - Analytics framework
 - Matter compiler
-- Built-in tools system
 - User authentication and authorization
 - Class and session management
-
----
-
-## Future Plans
-
-### Feature Roadmap
-- [ ] MCP (Model Context Protocol) migration
-- [ ] Provider expansion (additional AI providers)
-- [ ] Enhanced analytics capabilities
-- [ ] Improved experience catalog permissions
-
-See [roadmap](context/roadmap/) for detailed future plans.
-
----
-
-## Contributing
-
-Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
-
-## Documentation
-
-- **Architecture:** [context/architecture/](context/architecture/)
-- **Guides:** [context/guides/](context/guides/)
-- **Features:** [context/features/](context/features/)
-- **Changes:** [context/changes/](context/changes/)
-- **Code Reviews:** [context/code_reviews/](context/code_reviews/)
-
----
-
-**Note:** This project is being prepared for open source release. All refactorings maintain backward compatibility to ensure smooth transitions for existing users.
-
+- Module registry and installation system

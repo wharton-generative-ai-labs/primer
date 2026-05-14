@@ -96,4 +96,4 @@ For questions, security issues, code of conduct concerns, or other inquiries, co
 
 ## License
 
-By contributing to Primer, you agree that your contributions will be licensed under the Mozilla Public License 2.0, the same license as the project.
+By contributing to Primer, you agree that your contributions will be licensed under the MIT License, the same license as the project.
