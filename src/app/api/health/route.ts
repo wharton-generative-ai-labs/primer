@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
 import { env } from '@/config/env';
+import packageJson from '../../../../package.json';
 
 /**
  * GET /api/health
@@ -11,7 +12,7 @@ export async function GET() {
   const checks: Record<string, string | number> = {
     status: 'ok',
     timestamp: new Date().toISOString(),
-    version: env.NEXT_PUBLIC_APP_VERSION || 'unknown',
+    version: packageJson.version,
     uptime: Math.floor(process.uptime()),
     environment: env.NODE_ENV,
   };

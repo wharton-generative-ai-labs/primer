@@ -2,14 +2,9 @@
 
 import Image from 'next/image'
 import { signOut, useSession } from "next-auth/react";
-import { getVersionInfo } from '../../version';
+import packageJson from '../../../package.json';
 import { useState, useEffect } from 'react';
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card"
 import { Button } from "@/components/ui/button"
 import { HEADER_CLASSES, FOOTER_CLASSES } from "@/config/layout"
 
@@ -38,9 +33,6 @@ export default function PrimerBackground({
   loadingPhase = null
 }: PrimerBackgroundProps) {
   const { data: session } = useSession();
-  const versionInfo = getVersionInfo();
-  const buildDate = versionInfo.buildTime ? new Date(versionInfo.buildTime).toLocaleString() : 'Unknown';
-  
   const [startAnimation, setStartAnimation] = useState(false);
   
   // Motion value for the reveal radius (0 = hidden, 150 = fully revealed)
@@ -96,21 +88,7 @@ export default function PrimerBackground({
             <div className="flex-1 flex justify-center items-center">
               <div className="flex flex-col items-center">
                 <h1 className="text-base md:text-2xl font-minion">Primer</h1>
-                {/* Version info - matches PlayPageHeader agent name position */}
-                <HoverCard>
-                  <HoverCardTrigger asChild>
-                    <span className="text-xs text-gray-300 cursor-help">{versionInfo.version}</span>
-                  </HoverCardTrigger>
-                  <HoverCardContent className="w-80 bg-black/90 border-gray-700 z-modal">
-                    <div className="text-xs text-white/70">
-                      <p className="font-semibold mb-1">Build Information:</p>
-                      <p>Version: {versionInfo.version}</p>
-                      <p>Branch: {versionInfo.gitBranch || 'Unknown'}</p>
-                      <p>Commit: {versionInfo.gitCommit?.substring(0, 7) || 'Unknown'}</p>
-                      <p>Built: {buildDate}</p>
-                    </div>
-                  </HoverCardContent>
-                </HoverCard>
+                <span className="text-xs text-gray-300">{packageJson.version}</span>
               </div>
             </div>
 

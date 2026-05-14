@@ -35,10 +35,6 @@ async function initializeEnv() {
       NEXT_PUBLIC_SHOW_TEST_IFRAME: process.env.NEXT_PUBLIC_SHOW_TEST_IFRAME,
       STORAGE_ROOT_PATH: process.env.STORAGE_ROOT_PATH,
       USER_ROLE_MAPPINGS: process.env.USER_ROLE_MAPPINGS,
-      NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION,
-      NEXT_PUBLIC_GIT_COMMIT_SHA: process.env.NEXT_PUBLIC_GIT_COMMIT_SHA,
-      NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
-      NEXT_PUBLIC_BUILD_TIME: process.env.NEXT_PUBLIC_BUILD_TIME,
       NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: process.env.NEXT_PUBLIC_DELEGATION_TIMEOUT_MS,
       MODULE_REGISTRY_URLS: process.env.MODULE_REGISTRY_URLS,
       MODULE_REGISTRY_TOKEN: process.env.MODULE_REGISTRY_TOKEN,
@@ -86,12 +82,6 @@ async function initializeEnv() {
       STORAGE_ROOT_PATH: z.string().optional(),
       USER_ROLE_MAPPINGS: z.string().optional(),
       
-      // Build-time environment variables (NEXT_PUBLIC_* are injected at build time)
-      NEXT_PUBLIC_APP_VERSION: z.string().optional(),
-      NEXT_PUBLIC_GIT_COMMIT_SHA: z.string().optional(),
-      NEXT_PUBLIC_GIT_BRANCH: z.string().optional(),
-      NEXT_PUBLIC_BUILD_TIME: z.string().optional(),
-      
       // Agent configuration
       NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: z.string().optional(), // Delegation timeout in milliseconds (default: 900000 = 15 min)
       
@@ -114,10 +104,6 @@ async function initializeEnv() {
           NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
           NEXT_PUBLIC_SOCKET_SERVER_URL: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL,
           NEXT_PUBLIC_SHOW_TEST_IFRAME: process.env.NEXT_PUBLIC_SHOW_TEST_IFRAME,
-          NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION,
-          NEXT_PUBLIC_GIT_COMMIT_SHA: process.env.NEXT_PUBLIC_GIT_COMMIT_SHA,
-          NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
-          NEXT_PUBLIC_BUILD_TIME: process.env.NEXT_PUBLIC_BUILD_TIME,
           NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: process.env.NEXT_PUBLIC_DELEGATION_TIMEOUT_MS,
         } as any;
       }
@@ -159,10 +145,6 @@ async function initializeEnv() {
               NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
               NEXT_PUBLIC_SOCKET_SERVER_URL: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL,
               NEXT_PUBLIC_SHOW_TEST_IFRAME: process.env.NEXT_PUBLIC_SHOW_TEST_IFRAME,
-              NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION,
-              NEXT_PUBLIC_GIT_COMMIT_SHA: process.env.NEXT_PUBLIC_GIT_COMMIT_SHA,
-              NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
-              NEXT_PUBLIC_BUILD_TIME: process.env.NEXT_PUBLIC_BUILD_TIME,
               NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: process.env.NEXT_PUBLIC_DELEGATION_TIMEOUT_MS,
             } as any;
           }
@@ -173,10 +155,6 @@ async function initializeEnv() {
             NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
             NEXT_PUBLIC_SOCKET_SERVER_URL: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL,
             NEXT_PUBLIC_SHOW_TEST_IFRAME: process.env.NEXT_PUBLIC_SHOW_TEST_IFRAME,
-            NEXT_PUBLIC_APP_VERSION: process.env.NEXT_PUBLIC_APP_VERSION,
-            NEXT_PUBLIC_GIT_COMMIT_SHA: process.env.NEXT_PUBLIC_GIT_COMMIT_SHA,
-            NEXT_PUBLIC_GIT_BRANCH: process.env.NEXT_PUBLIC_GIT_BRANCH,
-            NEXT_PUBLIC_BUILD_TIME: process.env.NEXT_PUBLIC_BUILD_TIME,
             NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: process.env.NEXT_PUBLIC_DELEGATION_TIMEOUT_MS,
           } as any;
         }

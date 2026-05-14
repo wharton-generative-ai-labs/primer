@@ -1,6 +1,6 @@
 {
   "name": "@primer/primer",
-  "version": "0.45.31",
+  "version": "0.45.32",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -8,13 +8,12 @@
     "react-is": "^19.0.0"
   },
   "scripts": {
-    "prepare": "chmod +x ./scripts/set-version-env.sh && (command -v husky >/dev/null 2>&1 && husky || true)",
-    "set-version": "./scripts/set-version-env.sh",
+    "prepare": "(command -v husky >/dev/null 2>&1 && husky || true)",
     "bump-version": "node scripts/bump-version.js",
-    "dev": "npm run set-version && tsx --inspect server.ts",
-    "build": "npm run set-version && next build",
-    "start": "npm run set-version && tsx server.ts",
-    "start:production": "npm run set-version && tsx server.ts",
+    "dev": "tsx --inspect server.ts",
+    "build": "next build",
+    "start": "tsx server.ts",
+    "start:production": "tsx server.ts",
     "lint": "next lint",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watch --passWithNoTests",

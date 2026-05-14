@@ -25,4 +25,4 @@ packageJson.version = newVersion;
 fs.writeFileSync(packagePath, JSON.stringify(packageJson, null, 2) + '\n');
 
 // Output only the version number for the shell script to capture
-console.log(newVersion); 
+console.log(newVersion);
