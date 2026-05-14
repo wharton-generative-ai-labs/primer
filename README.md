@@ -210,5 +210,5 @@ We gratefully acknowledge design and code contributions from [Lincoln Loop](http
 For questions, security issues, or other inquiries, contact the Wharton Generative AI Labs team at **genailab@wharton.upenn.edu**.
 
 ## Licenses
-This project is licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE).  
+This project is licensed under the MIT License. See [LICENSE](LICENSE).  
 This software uses third-party libraries or other resources that may be distributed under different licenses. See the [NOTICES.md](NOTICES.md) file for details and third-party licenses.
