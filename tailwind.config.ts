@@ -16,15 +16,9 @@ export default {
   theme: {
   	extend: {
 		fontFamily: {
+			sans: ['var(--font-roboto)', 'system-ui', 'sans-serif'],
+			serif: ['"Minion Pro"', 'Georgia', 'serif'],
 			'fira-code': ['Fira Code Custom'],
-			'acumin-cond': ['acuminprocond-regular'],
-			'acumin-cond-bold': ['acuminprocond-bold'],
-			'acumin-cond-black': ['acuminprocond-black'],
-			'acumin': ['acuminpro-regular'],
-			'acumin-bold': ['acuminpro-bold'],
-			'acumin-black': ['acuminpro-black'],
-			'minion': ['minionpro-regular'],
-			'minion-bold': ['minionpro-bold'],
 			'penn-sans': ['Arial', 'sans-serif'],
 			'penn-serif': ['Georgia', 'serif'],
 		},
@@ -71,6 +65,23 @@ export default {
   				DEFAULT: 'hsl(var(--destructive))',
   				foreground: 'hsl(var(--destructive-foreground))'
   			},
+  			success: {
+  				DEFAULT: 'hsl(var(--success))',
+  				foreground: 'hsl(var(--success-foreground))'
+  			},
+  			warning: {
+  				DEFAULT: 'hsl(var(--warning))',
+  				foreground: 'hsl(var(--warning-foreground))'
+  			},
+  			tag: {
+  				DEFAULT: 'hsl(var(--tag))',
+  				foreground: 'hsl(var(--tag-foreground))'
+  			},
+  			'accent-purple': {
+  				DEFAULT: 'hsl(var(--accent-purple))',
+  				foreground: 'hsl(var(--accent-purple-foreground))'
+  			},
+  			brand: 'hsl(var(--brand))',
   			border: 'hsl(var(--border))',
   			input: 'hsl(var(--input))',
   			ring: 'hsl(var(--ring))',
