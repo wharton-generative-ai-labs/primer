@@ -28,15 +28,11 @@ declare global {
 }
 
 interface ComponentScriptsProps {
-  experienceId: string;
-  sessionId: string;
   hasComponents?: boolean;
 }
 
-export function ComponentScripts({ 
-  experienceId: _experienceId, 
-  sessionId: _sessionId, 
-  hasComponents = false 
+export function ComponentScripts({
+  hasComponents = false,
 }: ComponentScriptsProps) {
   const [_scriptsLoaded, setScriptsLoaded] = useState(false);
 

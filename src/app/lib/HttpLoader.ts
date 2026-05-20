@@ -6,6 +6,21 @@ const logger = createModuleLogger('HttpLoader');
 export class HttpLoader implements ContentLoader {
     basePath: string = '';
     private currentOrigin: string = typeof window !== 'undefined' ? window.location.origin : '';
+    /**
+     * In-memory cache of pre-fetched content keyed by the path string callers
+     * pass to {@link loadContent}. Lets the RSC seed `experience.json` so the
+     * client doesn't refetch a payload the server already parsed.
+     */
+    private contentCache: Map<string, string> = new Map();
+
+    /**
+     * Pre-populate the loader's cache for a given path. Subsequent
+     * {@link loadContent} calls for the same path resolve from memory and skip
+     * the network round trip entirely.
+     */
+    seed(path: string, content: string): void {
+        this.contentCache.set(path, content);
+    }
 
     private isExternalUrl(url: string): boolean {
         try {
@@ -17,45 +32,47 @@ export class HttpLoader implements ContentLoader {
     }
 
     private resolveUrl(path: string): string {
-        logger.debug({ path, currentOrigin: this.currentOrigin, basePath: this.basePath }, 'Resolving URL');
-
         // If it's already a full URL, return as is
         if (path.startsWith('http://') || path.startsWith('https://')) {
-            logger.debug({ path }, 'Path is already a full URL, returning as is');
             return path;
         }
 
         // If it's a path starting with /, join it with current origin
         if (path.startsWith('/')) {
-            const resolvedUrl = `${this.currentOrigin}${path}`;
-            logger.debug({ path, resolvedUrl }, 'Path starts with /, joining with origin');
-            return resolvedUrl;
+            return `${this.currentOrigin}${path}`;
         }
 
         // If it's a relative path and basePath starts with /, join with origin
         if (this.basePath.startsWith('/')) {
             const baseDir = this.basePath.substring(0, this.basePath.lastIndexOf('/'));
-            const resolvedUrl = `${this.currentOrigin}${baseDir}/${path}`;
-            logger.debug({ path, basePath: this.basePath, resolvedUrl }, 'Relative path with basePath starting with /, joining with origin');
-            return resolvedUrl;
+            return `${this.currentOrigin}${baseDir}/${path}`;
         }
 
-        // For other cases (should not happen), return the path as is
-        logger.debug({ path }, 'No special handling needed, returning path as is');
         return path;
     }
 
     async loadContent(path: string, objectPath: string): Promise<LoadResult> {
+        const cached = this.contentCache.get(path);
+        if (cached !== undefined) {
+            return {
+                content: cached,
+                status: {
+                    friendlyName: path,
+                    path,
+                    objectPath,
+                    status: 'OK',
+                },
+            };
+        }
+
         const resolvedUrl = this.resolveUrl(path);
-        logger.debug({ resolvedUrl, originalPath: path }, 'Loading content');
 
         try {
             // For external URLs, use our proxy
             const fetchUrl = this.isExternalUrl(resolvedUrl)
                 ? `/api/proxy?url=${encodeURIComponent(resolvedUrl)}`
                 : resolvedUrl;
-            
-            logger.debug({ fetchUrl }, 'Fetching content');
+
             const response = await fetch(fetchUrl);
 
             if (!response.ok) {
@@ -83,7 +100,6 @@ export class HttpLoader implements ContentLoader {
             }
 
             const content = await response.text();
-            logger.debug({ path, contentLength: content.length }, 'Successfully loaded content');
             return {
                 content,
                 status: {

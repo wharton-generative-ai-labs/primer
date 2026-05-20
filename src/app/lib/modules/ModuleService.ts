@@ -80,6 +80,7 @@ export async function getModuleCatalog(): Promise<ModuleCatalogEntry[]> {
   for (const [id, entry] of Object.entries(registry)) {
     let installed = false;
     let installedVersion: string | null = null;
+    let previewImageUrl: string | undefined;
 
     try {
       const configPath = `${id}/experience.json`;
@@ -88,6 +89,10 @@ export async function getModuleCatalog(): Promise<ModuleCatalogEntry[]> {
         const content = await storage.readFile(configPath);
         const config = JSON.parse(content.toString());
         installedVersion = config.version || null;
+        const firstScene = config?.resources?.scenes?.[0];
+        if (typeof firstScene === 'string' && firstScene.length > 0) {
+          previewImageUrl = `/api/storage/${id}/${firstScene}`;
+        }
       }
     } catch {
       // Not installed or unreadable
@@ -101,6 +106,7 @@ export async function getModuleCatalog(): Promise<ModuleCatalogEntry[]> {
       installed,
       installedVersion,
       updateAvailable,
+      ...(previewImageUrl ? { previewImageUrl } : {}),
     });
   }
 

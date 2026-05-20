@@ -6,6 +6,7 @@ import { getSceneManager } from '../lib/SceneManager';
 // Types
 export interface SceneState {
     currentScene: string | null;
+    isSceneVisible: boolean;
 }
 
 export interface SceneResult {
@@ -15,6 +16,9 @@ export interface SceneResult {
 
 export interface SceneContextType extends SceneState {
     setScene: (sceneName: string) => SceneResult;
+    showScene: () => SceneResult;
+    hideScene: () => SceneResult;
+    setSceneVisible: (visible: boolean) => SceneResult;
     getScenePath: (sceneName: string | null) => string;
     addCustomScene: (sceneName: string, url: string) => SceneResult;
     removeCustomScene: (sceneName: string) => SceneResult;
@@ -31,10 +35,12 @@ export function SceneProvider({
     children: React.ReactNode
 }) {
     const [currentScene, setCurrentScene] = useState<string | null>(null);
+    const [isSceneVisible, setIsSceneVisible] = useState(false);
 
     const handleSetScene = useCallback((sceneName: string): SceneResult => {
         if (!sceneName) {
             setCurrentScene("default");
+            setIsSceneVisible(true);
             return {
                 result: false,
                 message: "No scene name provided, using default"
@@ -44,6 +50,7 @@ export function SceneProvider({
         const sceneManager = getSceneManager();
         if (!sceneManager.isValidScene(sceneName)) {
             setCurrentScene("blank");
+            setIsSceneVisible(true);
             return {
                 result: false,
                 message: `Scene '${sceneName}' not found. Using blank scene.`
@@ -51,6 +58,22 @@ export function SceneProvider({
         }
 
         setCurrentScene(sceneName);
+        setIsSceneVisible(true);
+        return { result: true };
+    }, []);
+
+    const handleShowScene = useCallback((): SceneResult => {
+        setIsSceneVisible(true);
+        return { result: true };
+    }, []);
+
+    const handleHideScene = useCallback((): SceneResult => {
+        setIsSceneVisible(false);
+        return { result: true };
+    }, []);
+
+    const handleSetSceneVisible = useCallback((visible: boolean): SceneResult => {
+        setIsSceneVisible(visible);
         return { result: true };
     }, []);
 
@@ -98,7 +121,11 @@ export function SceneProvider({
 
     const value = {
         currentScene,
+        isSceneVisible,
         setScene: handleSetScene,
+        showScene: handleShowScene,
+        hideScene: handleHideScene,
+        setSceneVisible: handleSetSceneVisible,
         getScenePath,
         addCustomScene: handleAddCustomScene,
         removeCustomScene: handleRemoveCustomScene,

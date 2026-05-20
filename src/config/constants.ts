@@ -24,18 +24,50 @@ export const FILE_UPLOAD_LIMITS = {
 } as const;
 
 /**
- * Supported MIME types for user file uploads
+ * MIME types accepted for user file uploads, mapped to their canonical file
+ * extensions. Single source of truth for both:
+ *   1. Server-side validation — by MIME type via `SUPPORTED_MIME_TYPES`.
+ *   2. Client-side picker filtering — via `SUPPORTED_UPLOAD_ACCEPT`, fed to
+ *      `<input type="file" accept="...">` so the OS picker greys out files
+ *      we can't accept.
+ *
+ * Note: `<input accept>` is UX guidance, not a security boundary — users can
+ * still bypass it (and some browsers don't honor it perfectly). Server-side
+ * MIME validation is the authoritative check.
+ *
+ * Browser quirks worth knowing:
+ * - `.md` is reported as `text/markdown` by modern Chromium browsers and as
+ *   `text/plain` by some others; both are covered here.
+ * - Some Windows browsers send an empty `file.type` for `.md` when no app
+ *   claims the extension. We deliberately don't allow `''` — that would let
+ *   any unknown type through.
  */
-export const SUPPORTED_MIME_TYPES: readonly string[] = [
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain',
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp'
-];
+export const USER_UPLOAD_ACCEPTED_TYPES = {
+  'application/pdf': ['.pdf'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'text/plain': ['.txt'],
+  'text/markdown': ['.md'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+  'image/gif': ['.gif'],
+  'image/webp': ['.webp'],
+} as const satisfies Readonly<Record<string, readonly string[]>>;
+
+/** MIME types accepted by the user-upload endpoint. */
+export const SUPPORTED_MIME_TYPES: readonly string[] = Object.keys(
+  USER_UPLOAD_ACCEPTED_TYPES
+);
+
+/**
+ * Comma-separated value for `<input type="file" accept="...">`. Includes both
+ * MIME types and extensions because OSes vary in which they honor (macOS/iOS
+ * prefer MIME; Windows/Linux often need extensions).
+ */
+export const SUPPORTED_UPLOAD_ACCEPT: string = [
+  ...Object.keys(USER_UPLOAD_ACCEPTED_TYPES),
+  ...Object.values(USER_UPLOAD_ACCEPTED_TYPES).flat(),
+].join(',');
 
 /**
  * Allowed file types for experience uploads

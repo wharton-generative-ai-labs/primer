@@ -4,7 +4,7 @@ const isEdgeRuntime = typeof process !== 'undefined' && process.env.NEXT_RUNTIME
 const isNextBuildPhase = typeof process !== 'undefined' && (
   process.env.NEXT_PHASE === 'phase-production-build' ||
   process.env.npm_lifecycle_event === 'build' ||
-  process.argv.some((arg) => arg.includes('next') && arg.includes('build'))
+  (Array.isArray(process.argv) && process.argv.some((arg) => arg.includes('next') && arg.includes('build')))
 );
 
 // For Edge Runtime, use process.env directly without validation
@@ -33,6 +33,9 @@ async function initializeEnv() {
       ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
       NEXT_PUBLIC_SOCKET_SERVER_URL: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL,
       NEXT_PUBLIC_SHOW_TEST_IFRAME: process.env.NEXT_PUBLIC_SHOW_TEST_IFRAME,
+      NEXT_PUBLIC_DEV_AUTH_BYPASS: process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS,
+      NEXT_PUBLIC_DEV_AUTH_EMAIL: process.env.NEXT_PUBLIC_DEV_AUTH_EMAIL,
+      DEV_AUTH_BYPASS_EMAIL: process.env.DEV_AUTH_BYPASS_EMAIL,
       STORAGE_ROOT_PATH: process.env.STORAGE_ROOT_PATH,
       USER_ROLE_MAPPINGS: process.env.USER_ROLE_MAPPINGS,
       NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: process.env.NEXT_PUBLIC_DELEGATION_TIMEOUT_MS,
@@ -62,11 +65,11 @@ async function initializeEnv() {
     }
 
     const envSchema = z.object({
-      // Required environment variables
-      OPENAI_API_KEY: z.string().min(1, 'OPENAI_API_KEY is required'),
-      GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
-      GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
-      NEXTAUTH_SECRET: z.string().min(32, 'NEXTAUTH_SECRET must be at least 32 characters'),
+      // Auth and API environment variables. These are conditionally required below.
+      OPENAI_API_KEY: z.string().optional(),
+      GOOGLE_CLIENT_ID: z.string().optional(),
+      GOOGLE_CLIENT_SECRET: z.string().optional(),
+      NEXTAUTH_SECRET: z.string().optional(),
       
       // Optional environment variables with defaults
       NEXTAUTH_URL: z.union([z.string().url(), z.literal('')]).optional(),
@@ -79,15 +82,53 @@ async function initializeEnv() {
       ALLOWED_ORIGINS: z.string().optional(),
       NEXT_PUBLIC_SOCKET_SERVER_URL: z.string().url().optional(),
       NEXT_PUBLIC_SHOW_TEST_IFRAME: z.string().optional(),
+      NEXT_PUBLIC_DEV_AUTH_BYPASS: z.string().optional(),
+      NEXT_PUBLIC_DEV_AUTH_EMAIL: z.string().optional(),
+      DEV_AUTH_BYPASS_EMAIL: z.string().optional(),
       STORAGE_ROOT_PATH: z.string().optional(),
       USER_ROLE_MAPPINGS: z.string().optional(),
-      
+
       // Agent configuration
       NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: z.string().optional(), // Delegation timeout in milliseconds (default: 900000 = 15 min)
       
       // Module registry
       MODULE_REGISTRY_URLS: z.string().optional(), // Comma-separated list of module registry manifest URLs
       MODULE_REGISTRY_TOKEN: z.string().optional(), // GitHub PAT for accessing private module registries
+    }).superRefine((data, ctx) => {
+      const devAuthBypassEnabled =
+        data.NODE_ENV !== 'production' && data.NEXT_PUBLIC_DEV_AUTH_BYPASS === 'true';
+
+      if (!devAuthBypassEnabled && (!data.OPENAI_API_KEY || data.OPENAI_API_KEY.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['OPENAI_API_KEY'],
+          message: 'OPENAI_API_KEY is required',
+        });
+      }
+
+      if (!devAuthBypassEnabled && (!data.GOOGLE_CLIENT_ID || data.GOOGLE_CLIENT_ID.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['GOOGLE_CLIENT_ID'],
+          message: 'GOOGLE_CLIENT_ID is required',
+        });
+      }
+
+      if (!devAuthBypassEnabled && (!data.GOOGLE_CLIENT_SECRET || data.GOOGLE_CLIENT_SECRET.length === 0)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['GOOGLE_CLIENT_SECRET'],
+          message: 'GOOGLE_CLIENT_SECRET is required',
+        });
+      }
+
+      if (!devAuthBypassEnabled && (!data.NEXTAUTH_SECRET || data.NEXTAUTH_SECRET.length < 32)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['NEXTAUTH_SECRET'],
+          message: 'NEXTAUTH_SECRET must be at least 32 characters',
+        });
+      }
     });
 
     // Check if we're on server without using process.versions (not available in Edge Runtime)
@@ -104,6 +145,8 @@ async function initializeEnv() {
           NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
           NEXT_PUBLIC_SOCKET_SERVER_URL: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL,
           NEXT_PUBLIC_SHOW_TEST_IFRAME: process.env.NEXT_PUBLIC_SHOW_TEST_IFRAME,
+          NEXT_PUBLIC_DEV_AUTH_BYPASS: process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS,
+          NEXT_PUBLIC_DEV_AUTH_EMAIL: process.env.NEXT_PUBLIC_DEV_AUTH_EMAIL,
           NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: process.env.NEXT_PUBLIC_DELEGATION_TIMEOUT_MS,
         } as any;
       }
@@ -145,6 +188,8 @@ async function initializeEnv() {
               NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
               NEXT_PUBLIC_SOCKET_SERVER_URL: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL,
               NEXT_PUBLIC_SHOW_TEST_IFRAME: process.env.NEXT_PUBLIC_SHOW_TEST_IFRAME,
+              NEXT_PUBLIC_DEV_AUTH_BYPASS: process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS,
+              NEXT_PUBLIC_DEV_AUTH_EMAIL: process.env.NEXT_PUBLIC_DEV_AUTH_EMAIL,
               NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: process.env.NEXT_PUBLIC_DELEGATION_TIMEOUT_MS,
             } as any;
           }
@@ -155,6 +200,8 @@ async function initializeEnv() {
             NODE_ENV: (process.env.NODE_ENV as 'development' | 'production' | 'test') || 'development',
             NEXT_PUBLIC_SOCKET_SERVER_URL: process.env.NEXT_PUBLIC_SOCKET_SERVER_URL,
             NEXT_PUBLIC_SHOW_TEST_IFRAME: process.env.NEXT_PUBLIC_SHOW_TEST_IFRAME,
+            NEXT_PUBLIC_DEV_AUTH_BYPASS: process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS,
+            NEXT_PUBLIC_DEV_AUTH_EMAIL: process.env.NEXT_PUBLIC_DEV_AUTH_EMAIL,
             NEXT_PUBLIC_DELEGATION_TIMEOUT_MS: process.env.NEXT_PUBLIC_DELEGATION_TIMEOUT_MS,
           } as any;
         }
@@ -190,8 +237,21 @@ if (isEdgeRuntime) {
  * For server.ts and other synchronous code, we need to ensure initialization completes.
  * The proxy will return process.env as fallback until validatedEnv is ready.
  */
+// Env vars that callers (tests, dev tooling) override at runtime by mutating
+// `process.env` AFTER this module has loaded. The Proxy must skip its cache
+// for these so the override actually takes effect.
+const RUNTIME_MUTABLE_ENV_VARS = new Set<string>([
+  'STORAGE_ROOT_PATH',
+]);
+
 export const env = new Proxy({} as any, {
   get(_target, prop) {
+    // Always read runtime-mutable vars directly from process.env so test setup
+    // (e.g. `process.env.STORAGE_ROOT_PATH = tempRoot` in beforeAll) is honored
+    // even after the validated cache has been populated.
+    if (typeof prop === 'string' && RUNTIME_MUTABLE_ENV_VARS.has(prop)) {
+      return (process.env as any)[prop];
+    }
     // If validated env is ready, use it
     if (validatedEnv !== null) {
       return validatedEnv[prop];

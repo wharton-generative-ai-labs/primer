@@ -11,6 +11,7 @@ import { auditExperienceUpload } from '@/lib/audit-logger';
 import { extractZipToStorage } from '@/app/lib/modules/zip-utils';
 import { getToken } from 'next-auth/jwt';
 import { env } from '@/config/env';
+import { getEffectiveUserEmail } from '@/lib/devAuth';
 
 const logger = createModuleLogger('upload');
 
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest) {
 
     // Get user email for audit logging
     const token = await getToken({ req: request });
-    const userEmail = token?.email || 'anonymous';
+    const userEmail = getEffectiveUserEmail(token?.email) || 'anonymous';
 
     const contentType = request.headers.get('content-type') || '';
     let configPath: string;

@@ -1,8 +1,9 @@
 /**
- * PrimerUIElement - Shared interface for all UI elements (slides, components, etc.)
+ * PrimerUIElement - Shared interface for draggable utility windows and
+ * compatibility note metadata.
  * 
- * This interface allows unified management of different UI element types
- * through a common set of properties and behaviors.
+ * New scene/document content does not use this layer; workspace layout is
+ * derived from content visibility.
  */
 
 export type UIElementKind = 'slide' | 'component' | 'note' | 'mermaid';

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionMetadataFilePath, SessionMetadata, SessionEvent } from '@/app/lib/file-utils';
+import {
+  mutateSessionMetadata,
+  SessionMetadataNotFoundError,
+} from '@/app/lib/sessions/mutateSessionMetadata';
 import { createModuleLogger } from '@/lib/logger';
 import fs from 'fs/promises';
 
@@ -7,7 +11,7 @@ const logger = createModuleLogger('session-events');
 
 /**
  * POST - Add a new event to the session
- * 
+ *
  * Body: { event: string, agent: string, data?: object }
  * Headers: x-experience-id, x-session-id
  */
@@ -15,7 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const experienceId = req.headers.get('x-experience-id');
     const sessionId = req.headers.get('x-session-id');
-    
+
     if (!experienceId || !sessionId) {
       return NextResponse.json(
         { error: 'Experience ID and Session ID are required (via headers)' },
@@ -25,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { event, agent, data } = body;
-    
+
     if (!event || !agent) {
       return NextResponse.json(
         { error: 'Event type and agent are required' },
@@ -33,15 +37,34 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const metadataPath = await getSessionMetadataFilePath(experienceId, sessionId);
-    
-    // Read existing metadata
-    let metadata: SessionMetadata;
+    const now = new Date().toISOString();
+    const newEvent: SessionEvent = {
+      event,
+      agent,
+      timestamp: now,
+      ...(data && { data }),
+    };
+
+    let totalEvents: number;
     try {
-      const content = await fs.readFile(metadataPath, 'utf-8');
-      metadata = JSON.parse(content);
+      // Per-session lock serializes parallel POSTs so an event can't be lost
+      // to a last-writer-wins read-modify-write race.
+      totalEvents = await mutateSessionMetadata<number>(
+        experienceId,
+        sessionId,
+        async (metadata) => {
+          // Backward compatibility: older session.json files predate the
+          // events field. Initialize lazily inside the lock.
+          if (!metadata.events) {
+            metadata.events = [];
+          }
+          metadata.events.push(newEvent);
+          metadata.lastActivity = now;
+          return { metadata, result: metadata.events.length };
+        },
+      );
     } catch (error: unknown) {
-      if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'ENOENT') {
+      if (error instanceof SessionMetadataNotFoundError) {
         return NextResponse.json(
           { error: 'Session not found. Session must be initialized first.' },
           { status: 404 }
@@ -49,37 +72,13 @@ export async function POST(req: NextRequest) {
       }
       throw error;
     }
-    
-    // Ensure events array exists (backward compatibility)
-    if (!metadata.events) {
-      metadata.events = [];
-    }
-    
-    const now = new Date().toISOString();
-    
-    // Create the new event
-    const newEvent: SessionEvent = {
-      event,
-      agent,
-      timestamp: now,
-      ...(data && { data }),
-    };
-    
-    // Add event to array
-    metadata.events.push(newEvent);
-    
-    // Update lastActivity
-    metadata.lastActivity = now;
-    
-    // Write updated metadata
-    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
-    
+
     logger.debug({ event, agent, sessionId }, 'Added event to session');
-    
-    return NextResponse.json({ 
-      success: true, 
+
+    return NextResponse.json({
+      success: true,
       event: newEvent,
-      totalEvents: metadata.events.length
+      totalEvents,
     });
   } catch (error) {
     logger.error(error, 'Error adding event');

@@ -108,11 +108,11 @@ export function WindowManager() {
             variant="ghost"
             className="h-8 px-2 min-[540px]:px-3 gap-1 min-[540px]:gap-2 hover:bg-bay-blue hover:text-white min-[540px]:w-64"
           >
-            <Icon className={`w-4 h-4 flex-shrink-0 ${iconColor}`} />
+            <Icon className={`size-5 flex-shrink-0 ${iconColor}`} />
             <span className="text-sm font-medium flex-1 truncate text-left hidden min-[540px]:block">
               {displayTitle}
             </span>
-            <ChevronDown className="w-3 h-3 opacity-50 flex-shrink-0" />
+            <ChevronDown className="size-5 opacity-50 flex-shrink-0" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="center" className="w-64" style={{ zIndex: 9999 }}>

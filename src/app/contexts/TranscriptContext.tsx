@@ -1,8 +1,10 @@
 "use client";
 
-import React, { createContext, useContext, useState, FC, PropsWithChildren } from "react";
+import React, { createContext, useContext, useState, useRef, useCallback, FC, PropsWithChildren } from "react";
 import { generateUUID } from '@/app/lib/uuid';
 import { TranscriptItem } from "@/app/lib/types";
+
+type ActiveAgent = { key: string; name: string } | null;
 
 type TranscriptContextValue = {
   transcriptItems: TranscriptItem[];
@@ -10,16 +12,22 @@ type TranscriptContextValue = {
   updateTranscriptMessage: (itemId: string, text: string, isDelta: boolean) => void;
   addTranscriptBreadcrumb: (title: string, data?: Record<string, any>) => void;
   addTranscriptBreadcrumbWithId: (itemId: string, title: string, data?: Record<string, any>, status?: "IN_PROGRESS" | "DONE") => void;
+  addTranscriptHandoff: (fromName: string | undefined, toName: string | undefined, rationale?: string) => void;
+  addTranscriptToolError: (toolName: string, message: string, data?: Record<string, any>) => void;
   updateTranscriptBreadcrumb: (itemId: string, title?: string, data?: Record<string, any>) => void;
   toggleTranscriptItemExpand: (itemId: string) => void;
   updateTranscriptItemStatus: (itemId: string, newStatus: "IN_PROGRESS" | "DONE") => void;
   clearTranscript: () => void;
+  setActiveAgent: (key: string, name: string) => void;
+  activeAgent: ActiveAgent;
 };
 
 const TranscriptContext = createContext<TranscriptContextValue | undefined>(undefined);
 
 export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
   const [transcriptItems, setTranscriptItems] = useState<TranscriptItem[]>([]);
+  const [activeAgent, setActiveAgentState] = useState<ActiveAgent>(null);
+  const activeAgentRef = useRef<ActiveAgent>(null);
 
   function newTimestampPretty(): string {
     return new Date().toLocaleTimeString([], {
@@ -30,13 +38,24 @@ export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
     });
   }
 
+  function stampAgent<T extends Partial<TranscriptItem>>(item: T): T {
+    const a = activeAgentRef.current;
+    if (!a) return item;
+    return { ...item, agentKey: a.key, agentName: a.name };
+  }
+
+  const setActiveAgent = useCallback((key: string, name: string) => {
+    activeAgentRef.current = { key, name };
+    setActiveAgentState({ key, name });
+  }, []);
+
   const addTranscriptMessage: TranscriptContextValue["addTranscriptMessage"] = (itemId, role, text = "", isHidden = false) => {
     setTranscriptItems((prev) => {
       if (prev.some((log) => log.itemId === itemId && log.type === "MESSAGE")) {
         return prev;
       }
 
-      const newItem: TranscriptItem = {
+      const newItem: TranscriptItem = stampAgent({
         itemId,
         type: "MESSAGE",
         role,
@@ -46,7 +65,7 @@ export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
         createdAtMs: Date.now(),
         status: "IN_PROGRESS",
         isHidden,
-      };
+      }) as TranscriptItem;
 
       return [...prev, newItem];
     });
@@ -69,7 +88,7 @@ export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
   const addTranscriptBreadcrumb: TranscriptContextValue["addTranscriptBreadcrumb"] = (title, data) => {
     setTranscriptItems((prev) => [
       ...prev,
-      {
+      stampAgent({
         itemId: `breadcrumb-${generateUUID()}`,
         type: "BREADCRUMB",
         title,
@@ -79,7 +98,7 @@ export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
         createdAtMs: Date.now(),
         status: "DONE",
         isHidden: false,
-      },
+      }) as TranscriptItem,
     ]);
   };
 
@@ -92,7 +111,7 @@ export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
 
       return [
         ...prev,
-        {
+        stampAgent({
           itemId,
           type: "BREADCRUMB",
           title,
@@ -102,9 +121,56 @@ export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
           createdAtMs: Date.now(),
           status,
           isHidden: false,
-        },
+        }) as TranscriptItem,
       ];
     });
+  };
+
+  const addTranscriptHandoff: TranscriptContextValue["addTranscriptHandoff"] = (fromName, toName, rationale) => {
+    setTranscriptItems((prev) => [
+      ...prev,
+      {
+        itemId: `handoff-${generateUUID()}`,
+        type: "BREADCRUMB",
+        title: `Handed off to ${toName ?? "?"}`,
+        data: { from: fromName, to: toName, rationale },
+        expanded: false,
+        timestamp: newTimestampPretty(),
+        createdAtMs: Date.now(),
+        status: "DONE",
+        isHidden: false,
+        breadcrumbKind: "handoff",
+        agentKey: activeAgentRef.current?.key,
+        agentName: fromName,
+      },
+    ]);
+  };
+
+  const addTranscriptToolError: TranscriptContextValue["addTranscriptToolError"] = (
+    toolName,
+    message,
+    data
+  ) => {
+    // Always surfaces in the chat stream (not gated by debug mode) so the
+    // user can see when a tool call has failed without having to open the
+    // full event log.
+    setTranscriptItems((prev) => [
+      ...prev,
+      {
+        itemId: `tool-error-${generateUUID()}`,
+        type: "BREADCRUMB",
+        title: `${toolName} failed: ${message}`,
+        data: { toolName, message, ...(data ?? {}) },
+        expanded: false,
+        timestamp: newTimestampPretty(),
+        createdAtMs: Date.now(),
+        status: "DONE",
+        isHidden: false,
+        breadcrumbKind: "tool-error",
+        agentKey: activeAgentRef.current?.key,
+        agentName: activeAgentRef.current?.name,
+      },
+    ]);
   };
 
   const updateTranscriptBreadcrumb: TranscriptContextValue["updateTranscriptBreadcrumb"] = (itemId, title, data) => {
@@ -150,10 +216,14 @@ export const TranscriptProvider: FC<PropsWithChildren> = ({ children }) => {
         updateTranscriptMessage,
         addTranscriptBreadcrumb,
         addTranscriptBreadcrumbWithId,
+        addTranscriptHandoff,
+        addTranscriptToolError,
         updateTranscriptBreadcrumb,
         toggleTranscriptItemExpand,
         updateTranscriptItemStatus,
-        clearTranscript
+        clearTranscript,
+        setActiveAgent,
+        activeAgent,
       }}
     >
       {children}

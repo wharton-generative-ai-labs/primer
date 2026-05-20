@@ -1,17 +1,19 @@
 import { useSession } from 'next-auth/react';
 import { Permission } from '@/config/auth';
 import { useCallback } from 'react';
+import { getDevAuthPrivileges, isDevAuthBypassEnabled } from '@/lib/devAuth';
 
 export function usePermissions() {
     const { data: session } = useSession();
-    const privileges = session?.user?.privileges || [];
+    const bypassEnabled = isDevAuthBypassEnabled();
+    const privileges = session?.user?.privileges || (bypassEnabled ? getDevAuthPrivileges() : []);
 
     const can = useCallback((permission: Permission): boolean => {
-        if (!session?.user) {
+        if (!session?.user && !bypassEnabled) {
             return false;
         }
         return privileges.includes(permission);
-    }, [session, privileges]);
+    }, [session, privileges, bypassEnabled]);
 
     const cannot = useCallback((permission: Permission): boolean => {
         return !can(permission);
@@ -20,7 +22,7 @@ export function usePermissions() {
     return {
         can,
         cannot,
-        isAuthenticated: !!session?.user,
+        isAuthenticated: !!session?.user || bypassEnabled,
         // Expose privileges for cases where you need to check multiple permissions efficiently
         privileges,
         // Helper methods for checking multiple permissions

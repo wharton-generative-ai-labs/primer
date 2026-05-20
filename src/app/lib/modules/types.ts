@@ -19,6 +19,7 @@ export interface ModuleCatalogEntry extends ModuleEntry {
   installed: boolean;
   installedVersion: string | null;
   updateAvailable: boolean;
+  previewImageUrl?: string;
 }
 
 export interface InstallResult {

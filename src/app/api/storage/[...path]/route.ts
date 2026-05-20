@@ -82,7 +82,7 @@ export async function GET(
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': contentType,
-        'Cache-Control': 'public, must-revalidate',
+        'Cache-Control': 'public, max-age=300, stale-while-revalidate=86400',
         'ETag': etag,
         'Last-Modified': lastModified.toUTCString()
       },

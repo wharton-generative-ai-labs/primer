@@ -69,7 +69,7 @@ export function ReadmeDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[80vh] bg-black/95 border-gray-700 text-white">
+      <DialogContent className="max-w-4xl max-h-[80vh]">
         <DialogHeader>
           <DialogTitle className="text-xl">
             {currentDocPath ? `${experienceTitle} - ${currentDocPath}` : `${experienceTitle} - README`}
@@ -79,14 +79,14 @@ export function ReadmeDialog({
         <ScrollArea className="h-[60vh] pr-4">
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <p className="text-white/70">Loading...</p>
+              <p className="text-muted-foreground">Loading...</p>
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-8">
-              <p className="text-red-400">{error}</p>
+              <p className="text-destructive">{error}</p>
             </div>
           ) : (
-            <div className="prose prose-invert prose-sm max-w-none">
+            <div className="prose prose-sm max-w-none dark:prose-invert">
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -103,7 +103,7 @@ export function ReadmeDialog({
                             e.preventDefault();
                             if (href) fetchReadme(href);
                           }}
-                          className="text-blue-400 hover:text-blue-300 underline cursor-pointer"
+                          className="text-brand hover:text-brand/80 underline cursor-pointer"
                           {...props}
                         >
                           {children}
@@ -116,7 +116,7 @@ export function ReadmeDialog({
                         href={href}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-400 hover:text-blue-300 underline"
+                        className="text-brand hover:text-brand/80 underline"
                         {...props}
                       >
                         {children}
@@ -124,64 +124,64 @@ export function ReadmeDialog({
                     );
                   },
                   h1: ({ node: _node, ...props }) => (
-                    <h1 className="text-3xl font-bold mt-6 mb-4 text-white" {...props} />
+                    <h1 className="text-3xl font-bold mt-6 mb-4 text-foreground" {...props} />
                   ),
                   h2: ({ node: _node, ...props }) => (
-                    <h2 className="text-2xl font-bold mt-5 mb-3 text-white" {...props} />
+                    <h2 className="text-2xl font-bold mt-5 mb-3 text-foreground" {...props} />
                   ),
                   h3: ({ node: _node, ...props }) => (
-                    <h3 className="text-xl font-bold mt-4 mb-2 text-white" {...props} />
+                    <h3 className="text-xl font-bold mt-4 mb-2 text-foreground" {...props} />
                   ),
                   p: ({ node: _node, ...props }) => (
-                    <p className="mb-3 text-white/90 leading-relaxed" {...props} />
+                    <p className="mb-3 text-foreground/90 leading-relaxed" {...props} />
                   ),
                   ul: ({ node: _node, ...props }) => (
-                    <ul className="list-disc list-inside mb-3 text-white/90 space-y-1" {...props} />
+                    <ul className="list-disc list-inside mb-3 text-foreground/90 space-y-1" {...props} />
                   ),
                   ol: ({ node: _node, ...props }) => (
-                    <ol className="list-decimal list-inside mb-3 text-white/90 space-y-1" {...props} />
+                    <ol className="list-decimal list-inside mb-3 text-foreground/90 space-y-1" {...props} />
                   ),
                   li: ({ node: _node, ...props }) => (
-                    <li className="ml-4 text-white/90" {...props} />
+                    <li className="ml-4 text-foreground/90" {...props} />
                   ),
                   code: ({ node: _node, inline, ...props }: any) => {
                     if (inline) {
                       return (
                         <code
-                          className="bg-white/10 text-blue-300 px-1.5 py-0.5 rounded text-sm font-mono"
+                          className="bg-muted text-foreground px-1.5 py-0.5 rounded text-sm font-mono"
                           {...props}
                         />
                       );
                     }
                     return (
                       <code
-                        className="block bg-white/5 text-green-300 p-3 rounded text-sm font-mono overflow-x-auto"
+                        className="block bg-muted text-foreground p-3 rounded text-sm font-mono overflow-x-auto"
                         {...props}
                       />
                     );
                   },
                   pre: ({ node: _node, ...props }) => (
-                    <pre className="bg-white/5 p-3 rounded mb-3 overflow-x-auto" {...props} />
+                    <pre className="bg-muted p-3 rounded mb-3 overflow-x-auto" {...props} />
                   ),
                   blockquote: ({ node: _node, ...props }) => (
                     <blockquote
-                      className="border-l-4 border-blue-500 pl-4 italic text-white/80 my-3"
+                      className="border-l-4 border-primary pl-4 italic text-muted-foreground my-3"
                       {...props}
                     />
                   ),
                   hr: ({ node: _node, ...props }) => (
-                    <hr className="border-white/20 my-6" {...props} />
+                    <hr className="border-border my-6" {...props} />
                   ),
                   table: ({ node: _node, ...props }) => (
                     <div className="overflow-x-auto mb-3">
-                      <table className="min-w-full border border-white/20" {...props} />
+                      <table className="min-w-full border border-border" {...props} />
                     </div>
                   ),
                   th: ({ node: _node, ...props }) => (
-                    <th className="border border-white/20 px-3 py-2 bg-white/10 text-left font-semibold" {...props} />
+                    <th className="border border-border px-3 py-2 bg-muted text-left font-semibold" {...props} />
                   ),
                   td: ({ node: _node, ...props }) => (
-                    <td className="border border-white/20 px-3 py-2" {...props} />
+                    <td className="border border-border px-3 py-2" {...props} />
                   ),
                 }}
               >
@@ -192,10 +192,10 @@ export function ReadmeDialog({
         </ScrollArea>
         
         {currentDocPath && (
-          <div className="mt-2 pt-2 border-t border-white/10">
+          <div className="mt-2 pt-2 border-t border-border">
             <button
               onClick={() => fetchReadme()}
-              className="text-sm text-blue-400 hover:text-blue-300 underline"
+              className="text-sm text-brand hover:text-brand/80 underline"
             >
               ← Back to README
             </button>

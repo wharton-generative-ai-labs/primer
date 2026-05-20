@@ -145,7 +145,7 @@ export function ConfigInspectorPanel({ configContent, experienceId, onClose, onU
           <p className="text-sm text-gray-400 mt-1">Runtime analysis of experience.json</p>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} className="text-gray-400 hover:text-white">
-          <X className="w-5 h-5" />
+          <X className="size-5" />
         </Button>
       </div>
 
@@ -277,9 +277,9 @@ export function ConfigInspectorPanel({ configContent, experienceId, onClose, onU
                 >
                   <div className="flex items-center gap-3">
                     {expandedAgents.has(agent.key) ? (
-                      <ChevronDown className="w-4 h-4 shrink-0 group-hover:text-white" />
+                      <ChevronDown className="size-5 shrink-0 group-hover:text-white" />
                     ) : (
-                      <ChevronRight className="w-4 h-4 shrink-0 group-hover:text-white" />
+                      <ChevronRight className="size-5 shrink-0 group-hover:text-white" />
                     )}
                     <div className="text-left">
                       <div className="font-medium group-hover:text-white">{agent.name}</div>

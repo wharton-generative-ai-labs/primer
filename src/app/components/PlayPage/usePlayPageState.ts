@@ -1,14 +1,13 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { SessionStatus } from "../../lib/types";
 
-interface ChecklistState {
-  artifactId: string | null;
-  isVisible: boolean;
-}
-
 export function usePlayPageState(hasAudio: boolean) {
+  // Layout state moved into LayoutContext so the AI-controllable UI state
+  // (mode, panel collapse, document tab) lives in a single place that both
+  // React consumers and the useHandleServerEvent ui.* handlers can reach.
+
   // Session and connection state
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("DISCONNECTED");
   const [selectedAgentKey, setSelectedAgentKey] = useState<string>("");
@@ -42,16 +41,9 @@ export function usePlayPageState(hasAudio: boolean) {
     return true;
   });
   const [isAIAudioPlaying, setIsAIAudioPlaying] = useState<boolean>(false);
-  const [isUserAudioPlaying, setIsUserAudioPlaying] = useState<boolean>(false);
   
   // Transcript state
   const [userText, setUserText] = useState<string>("");
-  
-  // Checklist state
-  const [checklistState, setChecklistState] = useState<ChecklistState>({
-    artifactId: null,
-    isVisible: false,
-  });
 
 
   // Persist muted setting
@@ -89,15 +81,6 @@ export function usePlayPageState(hasAudio: boolean) {
     }
   }, [isDebugModeEnabled]);
 
-  // Checklist handlers
-  const showChecklist = useCallback((artifactId: string) => {
-    setChecklistState({ artifactId, isVisible: true });
-  }, []);
-
-  const hideChecklist = useCallback(() => {
-    setChecklistState({ artifactId: null, isVisible: false });
-  }, []);
-
   return {
     // Session state
     sessionStatus,
@@ -122,17 +105,10 @@ export function usePlayPageState(hasAudio: boolean) {
     setIsAudioPlaybackEnabled,
     isAIAudioPlaying,
     setIsAIAudioPlaying,
-    isUserAudioPlaying,
-    setIsUserAudioPlaying,
     
     // Transcript state
     userText,
     setUserText,
-    
-    // Checklist state
-    checklistState,
-    showChecklist,
-    hideChecklist,
   };
 }
 

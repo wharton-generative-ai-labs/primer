@@ -78,7 +78,6 @@ class SceneManager {
             logger.warn({ sceneName }, 'sceneManager.getScenePath scene not found. Using blank');
             sceneName = "blank";
         }
-        logger.debug({ sceneName, url: this.sceneMap[sceneName].url }, 'sceneManager returning path');
         return this.sceneMap[sceneName].url;
     }
 

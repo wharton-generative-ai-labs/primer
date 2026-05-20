@@ -3,6 +3,7 @@ import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
 import { getContentType } from '@/app/lib/mimeTypes';
 import { createModuleLogger } from '@/lib/logger';
 import path from 'path';
+import { assertSafeExperienceId, assertSafeRelativePath } from '@/app/lib/file-utils';
 
 const logger = createModuleLogger('resource-content');
 
@@ -15,19 +16,21 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: 'Missing parameters' }, { status: 400 });
     }
 
+    let fullPath: string;
+    try {
+        assertSafeExperienceId(experienceId);
+        const relative = resourcePath.startsWith(`${experienceId}/`)
+            ? resourcePath.slice(experienceId.length + 1)
+            : resourcePath;
+        assertSafeRelativePath(relative);
+        fullPath = path.join(experienceId, relative);
+    } catch (validationError) {
+        logger.warn({ err: validationError, experienceId, resourcePath }, 'Rejected unsafe resource-content request');
+        return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
+    }
+
     try {
         const storage = StorageServiceFactory.getInstance();
-        
-        // Check if resourcePath already starts with experienceId
-        // This handles cases where the client already includes experienceId in the path
-        let fullPath;
-        if (resourcePath.startsWith(`${experienceId}/`) || resourcePath === experienceId) {
-            fullPath = resourcePath;
-            logger.debug({ fullPath, experienceId }, 'Resource path already includes experienceId, using as is');
-        } else {
-            fullPath = path.join(experienceId, resourcePath);
-            logger.debug({ fullPath, experienceId, resourcePath }, 'Constructed full path');
-        }
 
         // Check if file exists
         const exists = await storage.fileExists(fullPath);

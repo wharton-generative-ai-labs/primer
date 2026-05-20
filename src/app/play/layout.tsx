@@ -1,4 +1,6 @@
 import '../globals.css'
+import { getCachedSession } from '@/lib/getCachedSession'
+import { PlaySessionProvider } from './PlaySessionProvider'
 
 export const metadata = {
     title: 'A Primer Experience',
@@ -8,10 +10,11 @@ export const metadata = {
     },
 }
 
-export default function PlayLayout({
+export default async function PlayLayout({
     children,
 }: {
     children: React.ReactNode
 }) {
-    return children;
+    const session = await getCachedSession()
+    return <PlaySessionProvider session={session}>{children}</PlaySessionProvider>
 }

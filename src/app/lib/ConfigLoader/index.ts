@@ -7,6 +7,7 @@
  */
 
 export { ConfigLoader } from './ConfigLoader';
+export type { LoadPhase, LoadPhaseCallback } from './ConfigLoader';
 export type {
     ConfigLoaderState,
     ArtifactCreationOptions,

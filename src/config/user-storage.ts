@@ -8,6 +8,7 @@ import * as path from 'path';
 import { RoleKey, ROLES, Role, Permission, isEnvDefinedUser } from './auth';
 import { createModuleLogger } from '@/lib/logger';
 import { env } from '@/config/env';
+import { getDevAuthEmail, getDevAuthRoles, isDevAuthBypassEnabled } from '@/lib/devAuth';
 
 const logger = createModuleLogger('user-storage');
 
@@ -77,14 +78,14 @@ export const getMergedUserRoles = (): Record<string, Role[]> => {
     
     // Add env users first
     Object.entries(envMappings).forEach(([email, roleKeys]) => {
-        result[email] = roleKeys.map(key => ROLES[key]);
+        result[email] = roleKeys.map(key => ROLES[key]).filter(Boolean);
     });
     
     // Add file-based users (only if not in env)
     const fileData = loadFileBasedUsers();
     Object.entries(fileData.users).forEach(([email, userData]) => {
         if (!result[email]) {
-            result[email] = userData.roles.map(key => ROLES[key]);
+            result[email] = userData.roles.map(key => ROLES[key]).filter(Boolean);
         }
     });
     
@@ -93,6 +94,9 @@ export const getMergedUserRoles = (): Record<string, Role[]> => {
 
 // Check if a user exists (in either env or file-based storage)
 export const userExists = (email: string): boolean => {
+    if (isDevAuthBypassEnabled() && email === getDevAuthEmail()) {
+        return true;
+    }
     if (isEnvDefinedUser(email)) {
         return true;
     }
@@ -102,6 +106,9 @@ export const userExists = (email: string): boolean => {
 
 // Get user roles from merged sources
 export const getMergedUserRolesForUser = (email: string): Role[] => {
+    if (isDevAuthBypassEnabled() && email === getDevAuthEmail()) {
+        return getDevAuthRoles();
+    }
     const allUsers = getMergedUserRoles();
     return allUsers[email] || [];
 };
@@ -131,4 +138,3 @@ export const hasMergedRole = (email: string, roleKey: RoleKey): boolean => {
     const roles = getMergedUserRolesForUser(email);
     return roles.some(role => role.key === roleKey);
 };
-

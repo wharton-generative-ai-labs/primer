@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
 import archiver from 'archiver';
 import { createModuleLogger } from '@/lib/logger';
+import { assertSafeExperienceId } from '@/app/lib/file-utils';
 
 const logger = createModuleLogger('download-session-data');
 
@@ -11,6 +12,12 @@ export async function GET(request: NextRequest) {
     const experienceId = request.nextUrl.searchParams.get('experienceId');
     if (!experienceId) {
       return NextResponse.json({ error: 'Experience ID is required' }, { status: 400 });
+    }
+    try {
+      assertSafeExperienceId(experienceId);
+    } catch (validationError) {
+      logger.warn({ err: validationError, experienceId }, 'Rejected unsafe download-session-data request');
+      return NextResponse.json({ error: 'Invalid experience ID' }, { status: 400 });
     }
     logger.debug({ experienceId }, 'Download session_data request');
 

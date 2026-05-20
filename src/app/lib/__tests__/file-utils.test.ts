@@ -122,11 +122,11 @@ describe('File Utilities', () => {
     });
 
     it('should throw error if experienceId is missing', () => {
-      expect(() => getSessionUploadPath('', 'sess123')).toThrow('Both experienceId and sessionId are required');
+      expect(() => getSessionUploadPath('', 'sess123')).toThrow(/required/);
     });
 
     it('should throw error if sessionId is missing', () => {
-      expect(() => getSessionUploadPath('exp123', '')).toThrow('Both experienceId and sessionId are required');
+      expect(() => getSessionUploadPath('exp123', '')).toThrow(/required/);
     });
 
     it('should handle IDs with special characters', () => {
@@ -203,6 +203,30 @@ describe('File Utilities', () => {
       await expect(getExperienceFolder('')).rejects.toThrow('Experience ID is required');
     });
 
+    it.each([
+      '..',
+      '../etc',
+      '../../etc/passwd',
+      'foo/bar',
+      'foo\\bar',
+      'foo\0bar',
+      '.',
+      './foo',
+      'foo bar',
+    ])('rejects unsafe experienceId: %s', async (badId) => {
+      await expect(getExperienceFolder(badId)).rejects.toThrow(/Invalid experience ID/);
+    });
+
+    it.each([
+      'abc123',
+      'roleplay-template',
+      'my_experience',
+      'a',
+      'A1b2C3',
+    ])('accepts safe experienceId: %s', async (goodId) => {
+      await expect(getExperienceFolder(goodId)).resolves.toContain(goodId);
+    });
+
     it('should use STORAGE_ROOT_PATH env var if set', async () => {
       // Mock the env module with custom storage path
       jest.resetModules();
@@ -234,11 +258,11 @@ describe('File Utilities', () => {
     });
 
     it('should throw error if experienceId is missing', () => {
-      expect(() => getExperienceArtifactsPath('', 'sess123')).toThrow('Experience ID and Session ID are required');
+      expect(() => getExperienceArtifactsPath('', 'sess123')).toThrow(/required/);
     });
 
     it('should throw error if sessionId is missing', () => {
-      expect(() => getExperienceArtifactsPath('exp123', '')).toThrow('Experience ID and Session ID are required');
+      expect(() => getExperienceArtifactsPath('exp123', '')).toThrow(/required/);
     });
   });
 
@@ -256,11 +280,11 @@ describe('File Utilities', () => {
     });
 
     it('should throw error if experienceId is missing', async () => {
-      await expect(getExperienceArtifactsFolder('', 'sess123')).rejects.toThrow('Experience ID and Session ID are required');
+      await expect(getExperienceArtifactsFolder('', 'sess123')).rejects.toThrow(/required/);
     });
 
     it('should throw error if sessionId is missing', async () => {
-      await expect(getExperienceArtifactsFolder('exp123', '')).rejects.toThrow('Experience ID and Session ID are required');
+      await expect(getExperienceArtifactsFolder('exp123', '')).rejects.toThrow(/required/);
     });
   });
 
@@ -288,11 +312,11 @@ describe('File Utilities', () => {
     });
 
     it('should throw error if experienceId is missing', () => {
-      expect(() => getSessionMetadataPath('', 'sess123')).toThrow('Experience ID and Session ID are required');
+      expect(() => getSessionMetadataPath('', 'sess123')).toThrow(/required/);
     });
 
     it('should throw error if sessionId is missing', () => {
-      expect(() => getSessionMetadataPath('exp123', '')).toThrow('Experience ID and Session ID are required');
+      expect(() => getSessionMetadataPath('exp123', '')).toThrow(/required/);
     });
   });
 
@@ -310,11 +334,11 @@ describe('File Utilities', () => {
     });
 
     it('should throw error if experienceId is missing', async () => {
-      await expect(getSessionMetadataFilePath('', 'sess123')).rejects.toThrow('Experience ID and Session ID are required');
+      await expect(getSessionMetadataFilePath('', 'sess123')).rejects.toThrow(/required/);
     });
 
     it('should throw error if sessionId is missing', async () => {
-      await expect(getSessionMetadataFilePath('exp123', '')).rejects.toThrow('Experience ID and Session ID are required');
+      await expect(getSessionMetadataFilePath('exp123', '')).rejects.toThrow(/required/);
     });
   });
 
@@ -322,7 +346,6 @@ describe('File Utilities', () => {
     it('should have all required event types', () => {
       expect(SESSION_EVENTS.SESSION_STARTED).toBe('session_started');
       expect(SESSION_EVENTS.SESSION_COMPLETED).toBe('session_completed');
-      expect(SESSION_EVENTS.PHASE_STARTED).toBe('phase_started');
       expect(SESSION_EVENTS.PHASE_COMPLETED).toBe('phase_completed');
     });
 
@@ -331,8 +354,21 @@ describe('File Utilities', () => {
       // Just verify the values are correct
       expect(SESSION_EVENTS.SESSION_STARTED).toBe('session_started');
       expect(SESSION_EVENTS.SESSION_COMPLETED).toBe('session_completed');
-      expect(SESSION_EVENTS.PHASE_STARTED).toBe('phase_started');
       expect(SESSION_EVENTS.PHASE_COMPLETED).toBe('phase_completed');
+    });
+
+    it('should have all workflow-phase event constants', () => {
+      expect(SESSION_EVENTS.WORKFLOW_PHASE_ENTERED).toBe('workflow_phase_entered');
+      expect(SESSION_EVENTS.WORKFLOW_PHASE_LEFT).toBe('workflow_phase_left');
+      expect(SESSION_EVENTS.WORKFLOW_PHASE_SKIPPED).toBe('workflow_phase_skipped');
+      expect(SESSION_EVENTS.WORKFLOW_PHASE_REVISITED).toBe('workflow_phase_revisited');
+      expect(SESSION_EVENTS.WORKFLOW_NEXT_OVERRIDDEN).toBe('workflow_next_overridden');
+      expect(SESSION_EVENTS.EXPERIENCE_COMPLETED).toBe('experience_completed');
+      expect(SESSION_EVENTS.EXPERIENCE_REWOUND).toBe('experience_rewound');
+    });
+
+    it('should not expose the removed PHASE_STARTED constant', () => {
+      expect((SESSION_EVENTS as Record<string, string | undefined>).PHASE_STARTED).toBeUndefined();
     });
   });
 
@@ -388,6 +424,80 @@ describe('File Utilities', () => {
       expect(metadata.lastActivity).toBeUndefined();
       expect(metadata.userName).toBeUndefined();
       expect(metadata.userEmail).toBeUndefined();
+    });
+
+    it('should satisfy SessionMetadata with workflowPhaseState', () => {
+      const _sampleWithPhase = {
+        sessionId: 'sess123',
+        experienceId: 'exp456',
+        startTime: new Date().toISOString(),
+        events: [],
+        workflowPhaseState: { currentPhase: 'discovery' },
+      } satisfies SessionMetadata;
+
+      expect(_sampleWithPhase.workflowPhaseState?.currentPhase).toBe('discovery');
+    });
+  });
+
+  describe('assertSafeRelativePath', () => {
+    let assertSafeRelativePath: typeof import('../file-utils').assertSafeRelativePath;
+
+    beforeAll(async () => {
+      ({ assertSafeRelativePath } = await import('../file-utils'));
+    });
+
+    it.each([
+      'resources/img.png',
+      'docs/file.md',
+      'a',
+      'a/b/c.txt',
+      'foo.json',
+    ])('accepts safe path: %s', (p) => {
+      expect(() => assertSafeRelativePath(p)).not.toThrow();
+    });
+
+    it.each([
+      '..',
+      '../etc/passwd',
+      '../../escape',
+      '/etc/passwd',
+      'foo/../bar',
+      'a/b/../../etc',
+      'foo\0bar',
+      '',
+    ])('rejects unsafe path: %s', (p) => {
+      expect(() => assertSafeRelativePath(p)).toThrow();
+    });
+  });
+
+  describe('safeJoinExperiencePath', () => {
+    let safeJoinExperiencePath: typeof import('../file-utils').safeJoinExperiencePath;
+    const root = path.join(path.sep, 'tmp', 'storage', 'exp123');
+
+    beforeAll(async () => {
+      ({ safeJoinExperiencePath } = await import('../file-utils'));
+    });
+
+    it.each([
+      'resources/img.png',
+      'a/b/c.txt',
+      'file.json',
+      './file.json',
+      'a/../b.txt', // normalized to b.txt, stays inside
+    ])('accepts safe path: %s', (p) => {
+      const result = safeJoinExperiencePath(root, p);
+      expect(result.startsWith(root)).toBe(true);
+    });
+
+    it.each([
+      '../escape.txt',
+      '../../etc/passwd',
+      '/etc/passwd',
+      'a/../../b.txt',
+      'foo\0bar',
+      '',
+    ])('rejects traversal/invalid path: %s', (p) => {
+      expect(() => safeJoinExperiencePath(root, p)).toThrow();
     });
   });
 });

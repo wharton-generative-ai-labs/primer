@@ -54,6 +54,32 @@ export function sanitizeZipEntryPath(zipEntryPath: string, targetDir: string): s
   return sanitizedPath;
 }
 
+/**
+ * Detects if all meaningful ZIP entries share a single common top-level folder
+ * (e.g. when macOS "Compress" wraps everything in a folder named after the zip).
+ * Returns the prefix string to strip (including trailing slash), or null if no
+ * wrapper is detected.
+ */
+export function detectWrapperFolder(entryPaths: string[]): string | null {
+  const filePaths = entryPaths.filter(p => p && p.trim().length > 0);
+  if (filePaths.length === 0) return null;
+
+  const firstSegments = filePaths.map(p => {
+    const normalized = p.replace(/\\/g, '/');
+    const slash = normalized.indexOf('/');
+    return slash !== -1 ? normalized.slice(0, slash + 1) : null;
+  });
+
+  // If any file sits at the root (no slash), there's no wrapper folder
+  if (firstSegments.some(s => s === null)) return null;
+
+  const first = firstSegments[0]!;
+  // All entries must share the same top-level folder
+  if (firstSegments.every(s => s === first)) return first;
+
+  return null;
+}
+
 export interface ExtractZipOptions {
   /** The target directory ID (folder name) within storage */
   targetId: string;
@@ -77,6 +103,29 @@ export async function extractZipToStorage(
     const storePromises: Promise<void>[] = [];
     let totalDecompressedSize = 0;
 
+    // First pass: collect all entry paths to detect a common wrapper folder
+    const allEntryPaths: { rawPath: string; type: string }[] = [];
+    await new Promise<void>((resolve, reject) => {
+      Readable.from(zipBuffer)
+        .pipe(Parse())
+        .on('entry', (entry) => {
+          if (entry.path) allEntryPaths.push({ rawPath: entry.path, type: entry.type });
+          entry.autodrain();
+        })
+        .on('error', reject)
+        .on('finish', resolve);
+    });
+
+    // Detect a single common top-level wrapper folder (e.g. from macOS "Compress")
+    // Ignore __MACOSX metadata entries when determining the prefix
+    const meaningfulPaths = allEntryPaths
+      .map(e => e.rawPath)
+      .filter(p => !p.startsWith('__MACOSX') && !p.startsWith('._'));
+    const stripPrefix = detectWrapperFolder(meaningfulPaths);
+    if (stripPrefix) {
+      logger.info({ stripPrefix }, 'Detected ZIP wrapper folder, stripping prefix');
+    }
+
     await new Promise<void>((resolve, reject) => {
       Readable.from(zipBuffer)
         .pipe(Parse())
@@ -87,9 +136,19 @@ export async function extractZipToStorage(
             return;
           }
 
-          const sanitizedPath = sanitizeZipEntryPath(fullPath, targetId);
+          // Strip the common wrapper folder prefix if detected
+          const effectivePath = stripPrefix && fullPath.startsWith(stripPrefix)
+            ? fullPath.slice(stripPrefix.length)
+            : fullPath;
+
+          if (!effectivePath) {
+            entry.autodrain();
+            return;
+          }
+
+          const sanitizedPath = sanitizeZipEntryPath(effectivePath, targetId);
           if (!sanitizedPath) {
-            logger.warn({ fullPath, targetId }, 'Skipping invalid ZIP entry path');
+            logger.warn({ fullPath, effectivePath, targetId }, 'Skipping invalid ZIP entry path');
             entry.autodrain();
             return;
           }

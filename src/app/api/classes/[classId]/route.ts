@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/authOptions';
 import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
 import { ClassesConfig } from '@/app/lib/types';
 import { Permission } from '@/config/auth';
@@ -78,7 +79,7 @@ export async function GET(
   { params }: { params: Promise<{ classId: string }> }
 ) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email;
     
     if (!userEmail) {

@@ -82,6 +82,18 @@ const isProduction = getNodeEnvSync() === 'production';
 const isServer = typeof window === 'undefined' && typeof process !== 'undefined' && !isEdgeRuntime && typeof process.versions?.node !== 'undefined';
 const isBrowser = typeof window !== 'undefined';
 
+// LOG_LEVEL env override (standard pino convention). Lets the harness (and
+// any other entry point) quiet debug output without mutating NODE_ENV, which
+// has knock-on effects on auth/config validation.
+type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+const rawLogLevel = typeof process !== 'undefined' ? process.env.LOG_LEVEL : undefined;
+const resolvedLogLevel: LogLevel = (['debug', 'info', 'warn', 'error'] as const).includes(rawLogLevel as LogLevel)
+  ? (rawLogLevel as LogLevel)
+  : isProduction
+    ? 'info'
+    : 'debug';
+const debugEnabled = resolvedLogLevel === 'debug';
+
 // pino-pretty uses worker threads which cause issues in Next.js server contexts
 // Disable it when running in Next.js server contexts (API routes, server components, etc.)
 // Only use pino-pretty in the custom server.ts context where worker threads work properly
@@ -96,7 +108,7 @@ const usePrettyTransport = !isProduction && isServer && !isNextJsContext;
 // Edge Runtime logger (simple console fallback)
 const edgeLogger = {
   debug: (obj: any, msg: string) => {
-    if (!isProduction) {
+    if (debugEnabled) {
       console.debug(`[DEBUG] ${msg}`, obj);
     }
   },
@@ -158,7 +170,7 @@ if (!isEdgeRuntime) {
           // Console stream (with pretty printing in dev)
           if (usePrettyTransport) {
             streams.push({
-              level: isProduction ? 'info' : 'debug',
+              level: resolvedLogLevel,
               stream: pino.transport({
                 target: 'pino-pretty',
                 options: {
@@ -170,7 +182,7 @@ if (!isEdgeRuntime) {
             });
           } else {
             streams.push({
-              level: isProduction ? 'info' : 'debug',
+              level: resolvedLogLevel,
               stream: process.stdout,
             });
           }
@@ -184,7 +196,7 @@ if (!isEdgeRuntime) {
           // Create logger with multiple streams
           logger = pino(
             {
-              level: isProduction ? 'info' : 'debug',
+              level: resolvedLogLevel,
               formatters: {
                 level: (label: string) => {
                   return { level: label };
@@ -207,7 +219,7 @@ if (!isEdgeRuntime) {
       // If file logging is not enabled or setup failed, use regular console logger
       if (!fileLoggingSuccess) {
         logger = pino({
-          level: isProduction ? 'info' : 'debug',
+          level: resolvedLogLevel,
           // Browser configuration: pino automatically uses console methods in browser
           // No special config needed - pino handles browser/server automatically
           browser: isBrowser
@@ -253,7 +265,7 @@ export const log = {
    * Use for detailed debugging information
    */
   debug: (message: string, ...args: any[]) => {
-    if (!isProduction) {
+    if (debugEnabled) {
       logger.debug({ data: args.length === 1 ? args[0] : args }, message);
     }
   },

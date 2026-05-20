@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ExperienceManagementService } from '@/app/lib/experience/ExperienceManagementService';
 import { getToken } from 'next-auth/jwt';
 import { createModuleLogger } from '@/lib/logger';
+import { getEffectiveUserEmail } from '@/lib/devAuth';
 
 const logger = createModuleLogger('experience');
 
@@ -9,7 +10,8 @@ export async function POST(request: NextRequest) {
     try {
         // Verify authentication
         const token = await getToken({ req: request });
-        if (!token?.email) {
+        const userEmail = getEffectiveUserEmail(token?.email);
+        if (!userEmail) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 

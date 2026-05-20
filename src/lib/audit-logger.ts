@@ -93,6 +93,7 @@ export type AuditEventType =
   | 'api.backend-agent'
   | 'api.analytics'
   | 'session.created'
+  | 'session.resumed'
   | 'session.deleted';
 
 /**
@@ -318,6 +319,17 @@ export async function auditSessionCreated(
   details: Record<string, any> = {}
 ): Promise<void> {
   await auditLog('session.created', userId, request, details);
+}
+
+/**
+ * Log session resumption (user chose "Continue" on the recovery dialog).
+ */
+export async function auditSessionResumed(
+  userId: string,
+  request: Request | { headers: Headers },
+  details: Record<string, any> = {}
+): Promise<void> {
+  await auditLog('session.resumed', userId, request, details);
 }
 
 /**

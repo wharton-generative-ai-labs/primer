@@ -1,5 +1,4 @@
-export { PlayPageHeader } from "./PlayPageHeader";
-export { PlayPageControls } from "./PlayPageControls";
-export { PlayPageContent } from "./PlayPageContent";
+export { PlayPageSplitContent } from "./PlayPageSplitContent";
 export { usePlayPageState } from "./usePlayPageState";
-
+export { PhaseSurfaceSwitch } from "./PhaseSurfaceSwitch";
+export type { PlayPageFooterApi } from "./playPageFooterApi";

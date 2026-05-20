@@ -63,7 +63,7 @@ export class ToolProcessor {
             logger.debug({ groups }, 'Plugin groups');
             
             for (const pluginName of experienceConfig.tools.plugins) {
-                await this.processPlugin(pluginName);
+                await this.processPlugin(pluginName, experienceConfig);
             }
         }
         
@@ -114,7 +114,7 @@ export class ToolProcessor {
         const groupsToRegister = [
             'builtin',      // Core tools (scene, information, file, etc.)
             'celebrate',    // Celebration effects
-            'slide',        // Slide/presentation tools
+            'slide',        // Document section tools
             'sound',        // Sound tools
             'web-search',   // Research tools
             // 'delegation' is now handled as an action within the 'agent' builtin tool
@@ -126,7 +126,7 @@ export class ToolProcessor {
         
         for (const groupName of groupsToRegister) {
             try {
-                const registrationFn = await this.getPluginRegistrationFunction(groupName);
+                const registrationFn = await this.getPluginRegistrationFunction(groupName, experienceConfig);
                 if (registrationFn) {
                     await registrationFn();
                 }
@@ -147,10 +147,10 @@ export class ToolProcessor {
     /**
      * Process a single plugin
      */
-    private async processPlugin(pluginName: string): Promise<void> {
+    private async processPlugin(pluginName: string, experienceConfig: ExperienceConfig): Promise<void> {
         try {
             const groupName = pluginName.split('/')[1].replace('-plugin', '');
-            const registrationFn = await this.getPluginRegistrationFunction(groupName);
+            const registrationFn = await this.getPluginRegistrationFunction(groupName, experienceConfig);
             
             if (registrationFn) {
                 logger.debug({ pluginName, groupName }, 'Registering centralized tools');
@@ -172,20 +172,21 @@ export class ToolProcessor {
      * Get the registration function for a plugin
      */
     private async getPluginRegistrationFunction(
-        groupName: string
+        groupName: string,
+        experienceConfig: ExperienceConfig,
     ): Promise<(() => Promise<void>) | null> {
         // Map of centralized tool registration functions
         const centralizedRegistration: Record<string, () => Promise<void>> = {
             'builtin': async () => {
-                // Use client-safe registration on client, full registration on server
+                // Use client-safe registration on client, full registration on server.
+                // Pass the experience config so workflow-phase tools are gated on
+                // `workflowPhases.length > 0`.
                 if (typeof window === 'undefined') {
-                    // Server-side: register all tools including server-only ones
                     const { registerBuiltinTools } = await import('../tools/builtin/register');
-                    return registerBuiltinTools();
+                    return registerBuiltinTools(experienceConfig);
                 } else {
-                    // Client-side: register only client-safe tools
                     const { registerClientBuiltinTools } = await import('../tools/builtin/register-client');
-                    return registerClientBuiltinTools();
+                    return registerClientBuiltinTools(experienceConfig);
                 }
             },
             'celebrate': async () => {
@@ -294,4 +295,3 @@ export class ToolProcessor {
         });
     }
 }
-

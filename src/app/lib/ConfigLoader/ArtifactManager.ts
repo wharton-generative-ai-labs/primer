@@ -7,7 +7,6 @@
 
 import { ExperienceConfig } from '../types';
 import { ResourceManager } from './ResourceManager';
-import { generateUUID } from '../uuid';
 import { createModuleLogger } from '@/lib/logger';
 import { ArtifactCreationOptions, ArtifactCreationContext } from './types';
 
@@ -44,33 +43,68 @@ export class ArtifactManager {
             return;
         }
 
-        logger.debug({ count: artifacts.length }, 'Loading artifacts');
-        
-        for (const artifact of artifacts) {
-            if (!artifact?.file) continue;
+        // Wait for the server-issued session id to land in sessionStorage
+        // before posting any artifacts. The /play/[id] RSC and the
+        // recovery dialog (chooseSessionAction) own session creation;
+        // ArtifactManager must NOT mint its own id here. Doing so used
+        // to silently bisect a fresh session into two folders — the
+        // generated id received the resource-bootstrapped artifacts,
+        // and the server-issued id (which arrives shortly after via
+        // socket auth) became the agent's session, where listArtifacts
+        // returned empty.
+        const sessionId = await this.waitForSessionId();
+        if (!sessionId) {
+            logger.warn(
+                'ArtifactManager: no session id available; skipping resource-artifact bootstrap. The agent will see an empty artifact list until the page reloads with a session id.',
+            );
+            // Mark loaded anyway so we don't infinite-retry; the caller
+            // will retry on next experience load.
+            this.artifactsLoaded = true;
+            return;
+        }
 
-            try {
-                const result = await this.resourceManager.loadResource(
-                    artifact.file,
-                    `resources.artifacts[${artifact.name}]`
-                );
-                
-                if (result.content) {
+        logger.debug({ count: artifacts.length, sessionId }, 'Loading artifacts');
+
+        // Create all declared artifacts in parallel so the disk has them
+        // available before the agent's first tool call. The previous
+        // sequential loop meant artifact N could be missing while artifact
+        // N-1 was still being written, racing any agent that asked
+        // `checklist({action:'get'})` before all writes settled. Promise.all
+        // with per-artifact error handling preserves the prior tolerance: a
+        // single artifact failure logs but doesn't block the others.
+        await Promise.all(
+            artifacts.map(async (artifact) => {
+                if (!artifact?.file) return;
+                try {
+                    const result = await this.resourceManager.loadResource(
+                        artifact.file,
+                        `resources.artifacts[${artifact.name}]`,
+                    );
+                    // Always seed declared artifacts, even when the source
+                    // file is empty. Placeholder artifacts (e.g.
+                    // `built-experience-id.md`) ship as 0-byte files whose
+                    // entire purpose is to carry declared `metadata.tags`
+                    // (`result:experience-id`, etc.) until the orchestrator
+                    // writes the real value. Skipping empty content here
+                    // dropped those tags and broke result-tag lookups.
                     await this.createArtifact(
                         experienceConfig.experienceId || '',
                         {
                             name: artifact.name,
-                            content: result.content,
+                            content: result.content ?? '',
                             type: artifact.type || 'markdown',
                             agents: artifact.agents,
-                            metadata: artifact.metadata
-                        }
+                            metadata: artifact.metadata,
+                        },
+                    );
+                } catch (error) {
+                    logger.error(
+                        { err: error, artifactName: artifact.name },
+                        'Failed to load artifact',
                     );
                 }
-            } catch (error) {
-                logger.error({ err: error, artifactName: artifact.name }, 'Failed to load artifact');
-            }
-        }
+            }),
+        );
 
         this.artifactsLoaded = true;
         logger.debug('Artifacts loading completed');
@@ -102,32 +136,67 @@ export class ArtifactManager {
     }
 
     /**
-     * Get the context needed for artifact creation (session ID, user info)
+     * Get the context needed for artifact creation (session ID, user info).
+     * Caller must have already confirmed via {@link waitForSessionId} that
+     * a server-issued session id is present in sessionStorage; this method
+     * never mints one.
      */
     private getArtifactCreationContext(experienceId: string): ArtifactCreationContext {
-        let sessionId: string;
-        let userName: string | undefined;
-        let userEmail: string | undefined;
+        const sessionId =
+            typeof window !== 'undefined' && typeof sessionStorage !== 'undefined'
+                ? sessionStorage.getItem('primer:session-id')
+                : null;
 
-        if (typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
-            // Get or create session ID
-            const existingSessionId = sessionStorage.getItem('primer:session-id');
-            if (existingSessionId) {
-                sessionId = existingSessionId;
-            } else {
-                sessionId = `sess_${generateUUID()}`;
-                sessionStorage.setItem('primer:session-id', sessionId);
-            }
-
-            // Get user info
-            userName = sessionStorage.getItem('primer:user-name') || undefined;
-            userEmail = sessionStorage.getItem('primer:user-email') || undefined;
-        } else {
-            // Fallback for server-side (shouldn't happen in current flow)
-            sessionId = `sess_${Date.now()}`;
+        if (!sessionId) {
+            // Should be unreachable when callers respect waitForSessionId.
+            throw new Error(
+                'ArtifactManager: no session id available — must call after a session is established',
+            );
         }
 
+        const userName =
+            typeof sessionStorage !== 'undefined'
+                ? sessionStorage.getItem('primer:user-name') || undefined
+                : undefined;
+        const userEmail =
+            typeof sessionStorage !== 'undefined'
+                ? sessionStorage.getItem('primer:user-email') || undefined
+                : undefined;
+
         return { experienceId, sessionId, userName, userEmail };
+    }
+
+    /**
+     * Poll sessionStorage for the server-issued session id. Returns the id
+     * once it lands, or `null` if the timeout expires (e.g., loaded outside
+     * a play context). Default budget is generous — page bootstrap is not
+     * latency-critical and a slow session creation should not silently
+     * skip artifact loading.
+     */
+    private async waitForSessionId(timeoutMs = 10_000, intervalMs = 50): Promise<string | null> {
+        if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') {
+            return null;
+        }
+        const deadline = Date.now() + timeoutMs;
+        // First read is synchronous so the common case (id already present)
+        // doesn't even hit setTimeout.
+        const initial = sessionStorage.getItem('primer:session-id');
+        if (initial) return initial;
+        return await new Promise(resolve => {
+            const tick = () => {
+                const value = sessionStorage.getItem('primer:session-id');
+                if (value) {
+                    resolve(value);
+                    return;
+                }
+                if (Date.now() >= deadline) {
+                    resolve(null);
+                    return;
+                }
+                setTimeout(tick, intervalMs);
+            };
+            setTimeout(tick, intervalMs);
+        });
     }
 
     /**

@@ -140,8 +140,8 @@ export default function EditPage() {
     return (
       <PrimerBackground useInitialBackdrop={true}>
         <div className="flex items-center justify-center h-full">
-          <div className="bg-black/50 backdrop-blur-lg rounded-lg p-6 max-w-md text-center">
-            <p className="text-white/90">Loading...</p>
+          <div className="bg-background backdrop-blur-lg rounded-lg p-6 max-w-md text-center">
+            <p className="text-foreground">Loading...</p>
           </div>
         </div>
       </PrimerBackground>

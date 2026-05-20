@@ -1,5 +1,6 @@
 import { Tool, ToolResponse } from '@/app/lib/types';
 import { ResourceDefinition, ResourceProcessor } from '@/app/lib/resource-types';
+import { getToolEnvKey } from '@/app/lib/tools/envRequirements';
 import { createModuleLogger } from '@/lib/logger';
 
 const logger = createModuleLogger('ToolRegistry');
@@ -77,14 +78,57 @@ export class ToolRegistry {
         this.registerProcessedTool(toolOrResource.definition, handler);
       }
     } else {
-      if (this.tools.has(toolOrResource.name)) {
-        logger.warn({ toolName: toolOrResource.name, sourceType }, 'Tool is already registered. Overwriting');
+      // Skip tools whose required env key is missing. The pre-flight gate
+      // surfaces this to the user; here we make sure agents that bypass the
+      // gate (or reach the tool via a fallback path) can't call into a
+      // handler that would crash at runtime.
+      const envKey = getToolEnvKey(toolOrResource.name);
+      if (envKey) {
+        const value = (process.env as Record<string, string | undefined>)[envKey];
+        if (!value || value.length === 0) {
+          logger.info(
+            { toolName: toolOrResource.name, envKey, sourceType, source },
+            'Skipping tool registration: required env key is not set',
+          );
+          return;
+        }
       }
-      
+
+      // Re-registration is normal — ConfigLoader.loadConfig fires on every
+      // page navigation, the backend ToolRegistrationManager re-registers per
+      // agent dispatch, and React strict mode double-invokes effects. Silently
+      // skip when the new registration matches the existing one (same shape +
+      // same handler ref). Only warn when the registration actually differs —
+      // that's the case where a real bug could be hiding.
+      const existing = this.tools.get(toolOrResource.name);
+      if (existing) {
+        const sameHandler = existing.handler === handler;
+        const sameShape =
+          existing.tool.description === toolOrResource.description &&
+          JSON.stringify(existing.tool.parameters) ===
+            JSON.stringify(toolOrResource.parameters);
+        if (sameHandler && sameShape) {
+          // Idempotent re-register — no-op.
+          return;
+        }
+        logger.warn(
+          {
+            toolName: toolOrResource.name,
+            sourceType,
+            descriptionChanged: existing.tool.description !== toolOrResource.description,
+            parametersChanged:
+              JSON.stringify(existing.tool.parameters) !==
+              JSON.stringify(toolOrResource.parameters),
+            handlerChanged: !sameHandler,
+          },
+          'Tool re-registered with a different definition; overwriting',
+        );
+      }
+
       this.tools.set(toolOrResource.name, { tool: toolOrResource, handler: handler! });
-      this.logToolsState('Tool registered', { 
+      this.logToolsState('Tool registered', {
         toolName: toolOrResource.name,
-        action: this.tools.has(toolOrResource.name) ? 'overwritten' : 'added',
+        action: existing ? 'overwritten' : 'added',
         sourceType,
         source
       });
@@ -212,12 +256,37 @@ export class ToolRegistry {
   }
 
   /**
-   * Register a processed tool with its handler
+   * Register a processed tool with its handler. Same idempotent semantics
+   * as `register()`: silently no-op when re-registering an identical tool,
+   * warn only when the definition or handler actually differs.
    */
   private registerProcessedTool(tool: Tool, handler?: ToolHandler): void {
     const name = tool.name;
     if (!handler) {
       throw new Error(`No handler provided for tool ${name}`);
+    }
+
+    const existing = this.tools.get(name);
+    if (existing) {
+      const sameHandler = existing.handler === handler;
+      const sameShape =
+        existing.tool.description === tool.description &&
+        JSON.stringify(existing.tool.parameters) ===
+          JSON.stringify(tool.parameters);
+      if (sameHandler && sameShape) {
+        return;
+      }
+      logger.warn(
+        {
+          toolName: name,
+          descriptionChanged: existing.tool.description !== tool.description,
+          parametersChanged:
+            JSON.stringify(existing.tool.parameters) !==
+            JSON.stringify(tool.parameters),
+          handlerChanged: !sameHandler,
+        },
+        'Tool re-registered with a different definition; overwriting',
+      );
     }
 
     this.tools.set(name, { tool, handler });

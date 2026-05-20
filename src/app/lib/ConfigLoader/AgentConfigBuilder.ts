@@ -65,6 +65,12 @@ export class AgentConfigBuilder {
             config.maximumToolCalls = agentData.maximumToolCalls;
         }
 
+        // Pass through the optional delegation contract (backend agents only,
+        // surfaced via `agent discover`).
+        if (agentData.delegationContract) {
+            config.delegationContract = agentData.delegationContract;
+        }
+
         return config;
     }
 

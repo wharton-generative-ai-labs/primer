@@ -3,6 +3,7 @@ import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
 import { FILE_UPLOAD_LIMITS } from '@/config/constants';
 import path from 'path';
 import { createModuleLogger } from '@/lib/logger';
+import { assertSafeExperienceId, assertSafeRelativePath } from '@/app/lib/file-utils';
 
 const logger = createModuleLogger('save-resource');
 
@@ -23,18 +24,22 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Content exceeds size limit' }, { status: 400 });
         }
 
-        const storage = StorageServiceFactory.getInstance();
-        
-        // Check if resourcePath already starts with experienceId
-        // This handles cases where the client already includes experienceId in the path
-        let fullPath;
-        if (resourcePath.startsWith(`${experienceId}/`) || resourcePath === experienceId) {
-            fullPath = resourcePath;
-            logger.debug({ fullPath }, 'Resource path already includes experienceId, using as is');
-        } else {
-            fullPath = path.join(experienceId, resourcePath);
-            logger.debug({ fullPath }, 'Constructed full path');
+        let fullPath: string;
+        try {
+            assertSafeExperienceId(experienceId);
+            // Some clients prepend `${experienceId}/`; strip it before validating
+            // the remainder against the relative-path rules.
+            const relative = resourcePath.startsWith(`${experienceId}/`)
+                ? resourcePath.slice(experienceId.length + 1)
+                : resourcePath;
+            assertSafeRelativePath(relative);
+            fullPath = path.join(experienceId, relative);
+        } catch (validationError) {
+            logger.warn({ err: validationError, experienceId, resourcePath }, 'Rejected unsafe save-resource request');
+            return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
         }
+
+        const storage = StorageServiceFactory.getInstance();
 
         // Verify the experience directory exists by checking for experience.json
         const experienceConfigPath = path.join(experienceId, 'experience.json');

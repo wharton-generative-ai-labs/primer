@@ -3,6 +3,7 @@ import { getSessionMetadataFilePath, SessionMetadata } from '@/app/lib/file-util
 import fs from 'fs/promises';
 import path from 'path';
 import { createModuleLogger } from '@/lib/logger';
+import { atomicWriteJson } from '@/app/lib/sessions/mutateSessionMetadata';
 
 const logger = createModuleLogger('session-metadata');
 
@@ -37,9 +38,12 @@ export async function POST(req: NextRequest) {
     
     // Create session directory if it doesn't exist
     await fs.mkdir(sessionDir, { recursive: true });
-    
-    // Write metadata file
-    await fs.writeFile(metadataPath, JSON.stringify(sessionMetadata, null, 2));
+
+    // Atomic write: stage to a temp file then rename. A plain writeFile
+    // truncates first, leaving an empty file if the process is interrupted
+    // mid-write — which makes any concurrent reader (e.g. the workflow-phase
+    // transition route) crash on `JSON.parse('')`.
+    await atomicWriteJson(metadataPath, sessionMetadata);
     
     return NextResponse.json({ success: true, metadata: sessionMetadata });
   } catch (error) {

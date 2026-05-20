@@ -5,18 +5,11 @@
  * 
  * Phase 0: Runtime Validation
  * 
- * Renders active custom component instances with per-component error boundaries.
- * Provides slide-like draggable/resizable container for all components.
+ * Shared error boundary for custom component instances rendered inside the
+ * document panel.
  */
 
-import React, { useState, useEffect } from 'react';
-import { 
-  getActiveComponentInstances, 
-  subscribeToStateUpdates,
-  getComponentManager
-} from '@/app/lib/tools/ui/components/ComponentManager';
-import { ComponentInstance } from '@/app/lib/tools/ui/components/types';
-import { ComponentWrapper } from '@/app/lib/tools/ui/components/ComponentWrapper';
+import React from 'react';
 import { createModuleLogger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
@@ -27,7 +20,7 @@ const logger = createModuleLogger('CustomComponents');
  * Error boundary for individual components.
  * Prevents one component's error from crashing all components.
  */
-class ComponentErrorBoundary extends React.Component<
+export class ComponentErrorBoundary extends React.Component<
   { 
     children: React.ReactNode; 
     instanceId: string;
@@ -132,67 +125,3 @@ function ComponentError({
     </div>
   );
 }
-
-/**
- * Main CustomComponents display component.
- * Renders all active component instances.
- */
-export function CustomComponents() {
-  const [instances, setInstances] = useState<ComponentInstance[]>([]);
-
-  useEffect(() => {
-    // Initial load
-    setInstances(getActiveComponentInstances());
-
-    // Subscribe to updates
-    const unsubscribe = subscribeToStateUpdates(() => {
-      setInstances(getActiveComponentInstances());
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  const handleRetry = (instanceId: string) => {
-    logger.info(`Retrying component instance: ${instanceId}`);
-    // Force re-render by updating state
-    setInstances(getActiveComponentInstances());
-  };
-
-  const handleDismiss = (instanceId: string) => {
-    logger.info(`Dismissing component instance: ${instanceId}`);
-    const manager = getComponentManager();
-    if (manager) {
-      manager.hideComponent(instanceId);
-    }
-  };
-
-  if (instances.length === 0) {
-    return null;
-  }
-
-  return (
-    <>
-      {instances.map((instance) => {
-        const Component = instance.component;
-        
-        return (
-          <ComponentWrapper
-            key={instance.instanceId}
-            instance={instance}
-            onClose={() => handleDismiss(instance.instanceId)}
-          >
-            <ComponentErrorBoundary
-              instanceId={instance.instanceId}
-              componentId={instance.componentId}
-              onRetry={() => handleRetry(instance.instanceId)}
-              onDismiss={() => handleDismiss(instance.instanceId)}
-            >
-              <Component {...instance.props} />
-            </ComponentErrorBoundary>
-          </ComponentWrapper>
-        );
-      })}
-    </>
-  );
-}
-

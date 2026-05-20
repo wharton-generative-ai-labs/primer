@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
 import { FileProcessor } from '@/app/lib/fileProcessing/FileProcessor';
-import { getSessionUploadPath } from '@/app/lib/file-utils';
+import { getSessionUploadPath, assertSafeRelativePath } from '@/app/lib/file-utils';
 import { getToken } from 'next-auth/jwt';
 import path from 'path';
 import { createModuleLogger } from '@/lib/logger';
@@ -41,9 +41,23 @@ export async function GET(
     }
 
     const { path: pathSegments } = await context.params;
-    const fileName = pathSegments[pathSegments.length - 1];
-    const basePath = getSessionUploadPath(experienceId, sessionId);
-    const filePath = path.join(basePath, fileName);
+    // The route is intended for a single filename, not a nested path. Reject
+    // multi-segment requests so that traversal attempts (`..`, encoded slashes)
+    // can never reach the filesystem layer.
+    if (pathSegments.length !== 1) {
+      return NextResponse.json({ error: 'Invalid file path' }, { status: 400 });
+    }
+    const fileName = pathSegments[0];
+    let basePath: string;
+    let filePath: string;
+    try {
+      assertSafeRelativePath(fileName);
+      basePath = getSessionUploadPath(experienceId, sessionId);
+      filePath = path.join(basePath, fileName);
+    } catch (validationError) {
+      logger.warn({ err: validationError, experienceId, sessionId, fileName }, 'Rejected unsafe file-info request');
+      return NextResponse.json({ error: 'Invalid file path' }, { status: 400 });
+    }
     
     const storage = StorageServiceFactory.getInstance();
 

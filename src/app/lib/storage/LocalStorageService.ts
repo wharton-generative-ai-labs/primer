@@ -16,14 +16,26 @@ export class LocalStorageService implements StorageService {
   }
 
   private getFullPath(filePath: string): string {
-    const fullPath = path.join(this.baseDir, filePath);
-    const resolvedPath = path.resolve(fullPath);
-    
-    // Basic path traversal protection
-    if (!resolvedPath.startsWith(this.baseDir)) {
+    if (typeof filePath !== 'string') {
+      throw new Error('Invalid path: not a string');
+    }
+    if (filePath.includes('\0')) {
+      throw new Error('Invalid path: null byte');
+    }
+    // Empty string means "the base directory itself" — callers like
+    // listDirectories('') rely on this for top-level enumeration.
+    const resolvedBase = path.resolve(this.baseDir);
+    const resolvedPath = path.resolve(resolvedBase, filePath);
+
+    // Path traversal protection. The trailing separator stops sibling-prefix
+    // false positives (e.g. baseDir "/app/storage" matching "/app/storage-evil/x").
+    if (
+      resolvedPath !== resolvedBase &&
+      !resolvedPath.startsWith(resolvedBase + path.sep)
+    ) {
       throw new Error('Invalid path: Path traversal detected');
     }
-    
+
     return resolvedPath;
   }
 

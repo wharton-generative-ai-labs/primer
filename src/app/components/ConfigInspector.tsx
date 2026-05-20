@@ -249,9 +249,9 @@ export function ConfigInspector({ isOpen, onClose, configContent, onUpgrade }: C
                     >
                       <div className="flex items-center gap-3">
                         {expandedAgents.has(agent.key) ? (
-                          <ChevronDown className="w-4 h-4 shrink-0" />
+                          <ChevronDown className="size-5 shrink-0" />
                         ) : (
-                          <ChevronRight className="w-4 h-4 shrink-0" />
+                          <ChevronRight className="size-5 shrink-0" />
                         )}
                         <div className="text-left">
                           <div className="font-medium">{agent.name}</div>

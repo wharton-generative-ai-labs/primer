@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button"
 export default function Unauthorized() {
   return (
     <PrimerBackground useInitialBackdrop={true}>
-      <div className="absolute inset-0 flex items-end justify-center pb-[calc(40px+1rem)] md:pb-[calc(56px+1rem)]">
-        <div className="max-w-2xl w-full mx-4">
+      <div className="flex h-full items-end justify-center pb-4">
+        <div className="mx-4 w-full max-w-2xl">
             <div className={`rounded-lg p-8 text-center backdrop-blur-lg shadow-2xl text-white bg-black/30 transition-opacity duration-500 ${true ? 'opacity-100' : 'opacity-0'}`}>
               <div>
                 <h2 className="text-xl font-semibold mb-6">

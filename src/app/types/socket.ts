@@ -3,6 +3,8 @@
  * Defines the type-safe contract between the client and server.
  */
 
+import type { SessionArtifactRecord, ArtifactRevisionMeta } from '@/app/lib/artifacts/types';
+
 // Tool calling events
 export interface ToolCallEvent {
   callId: string;
@@ -11,6 +13,23 @@ export interface ToolCallEvent {
   sessionId: string;
   experienceId?: string;
   selectedAgentKey?: string;
+}
+
+// Artifact mutation events fired by backend agent writes. The frontend
+// merges these into ArtifactContext so the banner / switcher / library
+// stay in sync without polling. User-initiated frontend writes use the
+// REST response path instead — both eventually call the same
+// mergeArtifactUpdate action.
+export interface ArtifactChangedEvent {
+  sessionId: string;
+  artifactId: string;
+  artifact: SessionArtifactRecord;
+  revisions: ArtifactRevisionMeta[];
+}
+
+export interface ArtifactDeletedEvent {
+  sessionId: string;
+  artifactId: string;
 }
 
 export interface ToolResultEvent {
@@ -23,42 +42,6 @@ export interface ToolResponseEvent {
   callId: string;
   status: 'success' | 'error';
   data: any;
-}
-
-// UI manipulation events
-export interface UIElementShowEvent {
-  callId: string;
-  id: string;
-}
-
-export interface UIElementHideEvent {
-  callId: string;
-  id: string;
-}
-
-export interface UIElementMoveEvent {
-  callId: string;
-  id: string;
-  x: number;
-  y: number;
-}
-
-export interface UIElementResizeEvent {
-  callId: string;
-  id: string;
-  w: number;
-  h: number;
-}
-
-export interface UIElementMaximizeEvent {
-  callId: string;
-  id: string;
-  maximized: boolean;
-}
-
-export interface UIElementDestroyEvent {
-  callId: string;
-  id: string;
 }
 
 // Component events
@@ -105,21 +88,6 @@ export interface UIObserveRequestEvent {
   callId: string;
 }
 
-export interface UIObserveResponseEvent {
-  callId: string;
-  elements: any[]; // PrimerUIElement[]
-  viewport: {
-    width: number;
-    height: number;
-  };
-  insets: {
-    left: number;
-    right: number;
-    top: number;
-    bottom: number;
-  };
-}
-
 export interface UISlideCreateEvent {
   callId: string;
   title: string;
@@ -127,6 +95,20 @@ export interface UISlideCreateEvent {
   artifactId?: string;
   artifactName?: string;
   artifactType?: string;
+}
+
+export interface UISlideListEvent {
+  callId: string;
+}
+
+export interface UISlideCloseEvent {
+  callId: string;
+  id: string;
+}
+
+export interface UIDocumentVisibilityEvent {
+  callId: string;
+  visible: boolean;
 }
 
 // Note UI events
@@ -178,15 +160,12 @@ export interface ServerToClientEvents {
   'disconnect': () => void;
   'connect_error': (err: Error) => void;
   
-  // UI manipulation events
-  'ui.element.show': (data: UIElementShowEvent) => void;
-  'ui.element.hide': (data: UIElementHideEvent) => void;
-  'ui.element.move': (data: UIElementMoveEvent) => void;
-  'ui.element.resize': (data: UIElementResizeEvent) => void;
-  'ui.element.maximize': (data: UIElementMaximizeEvent) => void;
-  'ui.element.destroy': (data: UIElementDestroyEvent) => void;
+  // UI tool events
   'ui.observe.request': (data: UIObserveRequestEvent) => void;
   'ui.slide.create': (data: UISlideCreateEvent) => void;
+  'ui.slide.list': (data: UISlideListEvent) => void;
+  'ui.slide.close': (data: UISlideCloseEvent) => void;
+  'ui.document.visibility': (data: UIDocumentVisibilityEvent) => void;
   
   // Component events
   'ui.component.create': (data: UIComponentCreateEvent) => void;
@@ -220,6 +199,10 @@ export interface ServerToClientEvents {
   // Admin agent run events (management pages)
   'agent.run:status': (data: { runId: string; status: string; agentName?: string; toolName?: string; action?: string }) => void;
   'agent.run:complete': (data: { runId: string; status: 'success' | 'error'; message?: string; totalToolCalls?: number; error?: string }) => void;
+
+  // Backend-agent-driven artifact mutations (see ArtifactChangedEvent docs)
+  'artifact.changed': (data: ArtifactChangedEvent) => void;
+  'artifact.deleted': (data: ArtifactDeletedEvent) => void;
 }
 
 export interface ClientToServerEvents {
@@ -233,9 +216,6 @@ export interface ClientToServerEvents {
   
   // Tool results from UI operations
   'tool.result': (data: ToolResultEvent) => void;
-  
-  // UI state response
-  'ui.observe.response': (data: UIObserveResponseEvent) => void;
   
   // Agent delegation
   'agent.delegate': (data: AgentDelegateEvent) => void;
@@ -265,4 +245,3 @@ export interface SocketData {
   agentKey?: string;
   selectedAgentKey?: string;
 }
-

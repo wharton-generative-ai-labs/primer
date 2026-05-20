@@ -5,19 +5,16 @@ import { createModuleLogger } from "@/lib/logger";
 import { env } from "@/config/env";
 import { setGlobalSocket } from "@/app/lib/tools/client/tool-calling-shim";
 import type {
-  UIElementShowEvent,
-  UIElementHideEvent,
-  UIElementMoveEvent,
-  UIElementResizeEvent,
-  UIElementMaximizeEvent,
-  UIElementDestroyEvent,
   UIObserveRequestEvent,
   UISlideCreateEvent,
+  UIDocumentVisibilityEvent,
   UIComponentCreateEvent,
   UIComponentUpdateStateEvent,
   UIComponentGetStateEvent,
   UIComponentClearCacheEvent,
-  ToolResponseEvent
+  ToolResponseEvent,
+  ArtifactChangedEvent,
+  ArtifactDeletedEvent
 } from "@/app/types/socket";
 
 const logger = createModuleLogger('SocketController');
@@ -82,7 +79,6 @@ export const SocketController = forwardRef<SocketControllerRef, SocketController
       // socket-based UI operations like slides, notes, components, etc.
     },
     setIsAIAudioPlaying: () => {},
-    setIsUserAudioPlaying: () => {},
     setQueuedAgentTransfer: () => {},
     isDebugModeEnabled,
     showChecklist,
@@ -212,8 +208,9 @@ export const SocketController = forwardRef<SocketControllerRef, SocketController
         if (data.type === 'socket.session.connected' && data.session?.id) {
           const existingStorageId = sessionStorage.getItem('primer:session-id');
           
-          // Only update ref if we have an existing session in storage
-          // Sessions should only be created through the /play/ route via ensureSession()
+          // Only update ref if we have an existing session in storage. The
+          // /play/ RSC + chooseSessionAction own session creation now; the
+          // socket adopts the id, never mints one.
           if (existingStorageId) {
             sessionIdRef.current = data.session.id;
             
@@ -228,36 +225,24 @@ export const SocketController = forwardRef<SocketControllerRef, SocketController
       });
 
       // Listen for direct UI events from server-first tools
-      socket.on('ui.element.show', (data: UIElementShowEvent) => {
-        handleServerEvent.current({ type: 'ui.element.show', data });
-      });
-
-      socket.on('ui.element.hide', (data: UIElementHideEvent) => {
-        handleServerEvent.current({ type: 'ui.element.hide', data });
-      });
-
-      socket.on('ui.element.move', (data: UIElementMoveEvent) => {
-        handleServerEvent.current({ type: 'ui.element.move', data });
-      });
-
-      socket.on('ui.element.resize', (data: UIElementResizeEvent) => {
-        handleServerEvent.current({ type: 'ui.element.resize', data });
-      });
-
-      socket.on('ui.element.maximize', (data: UIElementMaximizeEvent) => {
-        handleServerEvent.current({ type: 'ui.element.maximize', data });
-      });
-
-      socket.on('ui.element.destroy', (data: UIElementDestroyEvent) => {
-        handleServerEvent.current({ type: 'ui.element.destroy', data });
-      });
-
       socket.on('ui.observe.request', (data: UIObserveRequestEvent) => {
         handleServerEvent.current({ type: 'ui.observe.request', data });
       });
 
       socket.on('ui.slide.create', (data: UISlideCreateEvent) => {
         handleServerEvent.current({ type: 'ui.slide.create', data });
+      });
+
+      socket.on('ui.slide.list', (data: { callId: string }) => {
+        handleServerEvent.current({ type: 'ui.slide.list', data });
+      });
+
+      socket.on('ui.slide.close', (data: { callId: string; id: string }) => {
+        handleServerEvent.current({ type: 'ui.slide.close', data });
+      });
+
+      socket.on('ui.document.visibility', (data: UIDocumentVisibilityEvent) => {
+        handleServerEvent.current({ type: 'ui.document.visibility', data });
       });
 
       // Component tool UI events
@@ -287,6 +272,20 @@ export const SocketController = forwardRef<SocketControllerRef, SocketController
       socket.on('component.stateChange.forward', (data: any) => {
         logger.debug({ componentId: data.componentId }, 'Received component.stateChange.forward');
         window.dispatchEvent(new CustomEvent('primer:component-state-change', { detail: data }));
+      });
+
+      // Backend agent artifact mutations: dispatch as window events so
+      // ArtifactContext can call mergeArtifactUpdate / removeArtifactById
+      // without us needing a direct context handle here. Same pattern as
+      // primer:component-event above.
+      socket.on('artifact.changed', (data: ArtifactChangedEvent) => {
+        logger.debug({ artifactId: data.artifactId }, 'Received artifact.changed');
+        window.dispatchEvent(new CustomEvent('primer:artifact-changed', { detail: data }));
+      });
+
+      socket.on('artifact.deleted', (data: ArtifactDeletedEvent) => {
+        logger.debug({ artifactId: data.artifactId }, 'Received artifact.deleted');
+        window.dispatchEvent(new CustomEvent('primer:artifact-deleted', { detail: data }));
       });
 
       // Note tool UI events

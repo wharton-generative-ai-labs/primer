@@ -11,15 +11,15 @@ export default function TestAuth() {
   if (status === "loading") {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p>Loading...</p>
+        <p className="text-foreground">Loading...</p>
       </div>
     )
   }
 
   return (
     <PrimerBackground useInitialBackdrop={true}>
-      <div className="absolute inset-0 flex items-end justify-center pb-[calc(40px+1rem)] md:pb-[calc(56px+1rem)]">
-        <div className="max-w-2xl w-full mx-4">
+      <div className="flex h-full items-center justify-center py-8">
+        <div className="mx-4 w-full max-w-2xl">
             <div className="bg-black/30 backdrop-blur-lg rounded-xl shadow-2xl overflow-hidden p-8">
                 <div className="flex justify-between items-center mb-4">
                   <h1 className="text-2xl font-bold">Authentication Test Page</h1>

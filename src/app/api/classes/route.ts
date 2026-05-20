@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/authOptions';
 import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
 import { Class, ClassesConfig, ClassSummary } from '@/app/lib/types';
 import { Permission } from '@/config/auth';
@@ -113,7 +114,7 @@ async function canManageClasses(experienceId: string, userEmail: string): Promis
  */
 export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email;
     
     if (!userEmail) {
@@ -185,7 +186,7 @@ export async function POST(request: NextRequest) {
   let action: string | undefined;
   
   try {
-    const session = await getServerSession();
+    const session = await getServerSession(authOptions);
     const userEmail = session?.user?.email;
     
     if (!userEmail) {
