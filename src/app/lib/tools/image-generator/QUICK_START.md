@@ -1,5 +1,24 @@
 # Image Generation Quick Start Guide
 
+## Local Mock Mode (skip the 5-7 min wait while iterating)
+
+Set `MOCK_GENERATE_IMAGES=1` in `.env` to make the `generateImages` tool
+return stub 1x1 PNG artifacts instead of calling the real provider. The
+stubs are valid PNGs and are written through the normal `createArtifact`
+path, so downstream agents (e.g. the Experience Creator's
+`experience-builder`) see real artifact ids and the rest of the build
+flow is unchanged.
+
+```bash
+# .env
+OPENAI_API_KEY=sk-...        # still required (tool env-gate)
+MOCK_GENERATE_IMAGES=1       # short-circuits generateImages
+```
+
+Unset (or any value other than `1` / `true`) restores the real
+provider path. See `image.ts` for the short-circuit and the
+`__tests__/image.test.ts` suite for the contract.
+
 ## TL;DR - How to Switch to Nano Banana
 
 **Current setup (Imagen):**

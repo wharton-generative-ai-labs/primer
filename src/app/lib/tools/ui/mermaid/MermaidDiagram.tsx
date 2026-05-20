@@ -76,9 +76,17 @@ const initializeMermaid = () => {
 interface MermaidDiagramProps {
   title: string;
   diagram: string;
+  /**
+   * Visual theme for the container chrome (bg, error/loading states, zoom
+   * controls). Mermaid's node/text colors come from the singleton mermaid.js
+   * init and are not affected. Default 'dark' for the legacy overlay context;
+   * pass 'light' when rendering inside the white DocumentPanel.
+   */
+  theme?: 'dark' | 'light';
 }
 
-export function MermaidDiagram({ diagram }: MermaidDiagramProps) {
+export function MermaidDiagram({ diagram, theme = 'dark' }: MermaidDiagramProps) {
+  const isLight = theme === 'light';
   const defaultScale = 1.0;
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -225,8 +233,8 @@ export function MermaidDiagram({ diagram }: MermaidDiagramProps) {
 
   if (error) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-black/50 rounded-lg p-4">
-        <div className="text-red-500 text-sm max-w-md text-center">
+      <div className={`w-full h-full flex items-center justify-center rounded-lg p-4 ${isLight ? 'bg-red-50' : 'bg-black/50'}`}>
+        <div className={`text-sm max-w-md text-center ${isLight ? 'text-red-700' : 'text-red-500'}`}>
           <div className="font-bold mb-2">Error rendering diagram</div>
           <div className="text-xs opacity-80">{error}</div>
         </div>
@@ -236,8 +244,8 @@ export function MermaidDiagram({ diagram }: MermaidDiagramProps) {
 
   if (isLoading || !svgContent) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-black/30">
-        <div className="text-white text-sm">Loading diagram...</div>
+      <div className={`w-full h-full flex items-center justify-center ${isLight ? '' : 'bg-black/30'}`}>
+        <div className={`text-sm ${isLight ? 'text-slate-500' : 'text-white'}`}>Loading diagram...</div>
       </div>
     );
   }
@@ -245,14 +253,14 @@ export function MermaidDiagram({ diagram }: MermaidDiagramProps) {
   return (
     <div className="relative w-full h-full">
       <div className="absolute inset-0 p-1 md:p-2">
-        <div 
+        <div
           ref={containerRef}
-          className="relative w-full h-full bg-black/30 overflow-hidden"
+          className={`relative w-full h-full overflow-hidden ${isLight ? '' : 'bg-black/30'}`}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
         >
-          <div 
+          <div
             style={{
               position: 'absolute',
               left: position?.x ?? 0,
@@ -261,7 +269,7 @@ export function MermaidDiagram({ diagram }: MermaidDiagramProps) {
               transformOrigin: 'top left',
               cursor: isDragging ? 'grabbing' : 'grab',
             }}
-            className="pointer-events-auto [&_svg]:!overflow-visible [&_svg]:!bg-gray-900"
+            className={`pointer-events-auto [&_svg]:!overflow-visible ${isLight ? '' : '[&_svg]:!bg-gray-900'}`}
             onMouseDown={handleMouseDown}
             dangerouslySetInnerHTML={{ __html: svgContent }}
           />
@@ -272,21 +280,21 @@ export function MermaidDiagram({ diagram }: MermaidDiagramProps) {
       <div className="absolute bottom-4 right-4 flex gap-2 pointer-events-auto z-10">
         <button
           onClick={zoomOut}
-          className="p-2 rounded-lg bg-black hover:bg-black/70 text-white"
+          className={`p-2 rounded-lg ${isLight ? 'bg-white/80 text-slate-600 hover:bg-white shadow-sm border border-slate-200' : 'bg-black hover:bg-black/70 text-white'}`}
           title="Zoom Out"
         >
           <ZoomOut size={20} />
         </button>
         <button
           onClick={resetZoom}
-          className="p-2 rounded-lg bg-black hover:bg-black/70 text-white"
+          className={`p-2 rounded-lg ${isLight ? 'bg-white/80 text-slate-600 hover:bg-white shadow-sm border border-slate-200' : 'bg-black hover:bg-black/70 text-white'}`}
           title="Reset Zoom"
         >
           <Maximize size={20} />
         </button>
         <button
           onClick={zoomIn}
-          className="p-2 rounded-lg bg-black hover:bg-black/70 text-white"
+          className={`p-2 rounded-lg ${isLight ? 'bg-white/80 text-slate-600 hover:bg-white shadow-sm border border-slate-200' : 'bg-black hover:bg-black/70 text-white'}`}
           title="Zoom In"
         >
           <ZoomIn size={20} />

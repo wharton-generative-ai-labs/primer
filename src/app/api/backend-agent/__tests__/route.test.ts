@@ -66,6 +66,10 @@ jest.mock('../managers/AIRequestHandler', () => ({
   }
 }));
 
+jest.mock('@/app/lib/workflow-phases/objectiveSignals', () => ({
+  fireObjectiveSignal: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('POST /api/backend-agent - Integration Tests', () => {
   let mockRateLimit: jest.SpyInstance;
   let mockGetToken: jest.SpyInstance;
@@ -110,7 +114,10 @@ describe('POST /api/backend-agent - Integration Tests', () => {
         provider: 'openai',
         model: 'gpt-4',
         tools: []
-      }
+      },
+      config: {
+        toolSets: {},
+      },
     });
 
     (ToolRegistrationManager.initializeTools as jest.Mock).mockResolvedValue([]);
@@ -546,6 +553,100 @@ describe('POST /api/backend-agent - Integration Tests', () => {
         expect.any(Object),
         expect.any(Object)
       );
+    });
+  });
+
+  describe('POST /api/backend-agent — objective signal hook', () => {
+    beforeEach(() => {
+      const { fireObjectiveSignal } = jest.requireMock('@/app/lib/workflow-phases/objectiveSignals');
+      fireObjectiveSignal.mockClear();
+    });
+
+    it('fires fireObjectiveSignal with resolved agent key on success', async () => {
+      const { fireObjectiveSignal } = jest.requireMock('@/app/lib/workflow-phases/objectiveSignals');
+
+      const request = new NextRequest('http://localhost:3000/api/backend-agent', {
+        method: 'POST',
+        body: JSON.stringify({
+          agentType: 'test-agent',
+          artifactIds: ['artifact-1'],
+          taskDescription: 'Test task',
+          experienceId: 'test-exp',
+          sessionId: 'test-session',
+          delegationId: 'test-delegation'
+        }),
+        headers: {
+          'content-type': 'application/json'
+        }
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+
+      expect(fireObjectiveSignal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          experienceId: 'test-exp',
+          sessionId: 'test-session',
+          signal: expect.objectContaining({
+            kind: 'delegateSuccess',
+            resolvedAgentKey: 'test-agent',
+          }),
+        }),
+      );
+    });
+
+    it('does NOT fire fireObjectiveSignal on a 4xx/5xx error path', async () => {
+      const { fireObjectiveSignal } = jest.requireMock('@/app/lib/workflow-phases/objectiveSignals');
+
+      (ValidationManager.validateRequest as jest.Mock).mockResolvedValue({
+        valid: false,
+        error: 'Invalid request',
+        status: 400
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/backend-agent', {
+        method: 'POST',
+        body: JSON.stringify({}),
+        headers: {
+          'content-type': 'application/json'
+        }
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(400);
+
+      expect(fireObjectiveSignal).not.toHaveBeenCalled();
+    });
+
+    it('does NOT fire fireObjectiveSignal when AI throws (catch block)', async () => {
+      const { fireObjectiveSignal } = jest.requireMock('@/app/lib/workflow-phases/objectiveSignals');
+
+      (AIRequestHandler.sendInitialRequest as jest.Mock).mockRejectedValue(
+        new Error('AI service unavailable')
+      );
+
+      const request = new NextRequest('http://localhost:3000/api/backend-agent', {
+        method: 'POST',
+        body: JSON.stringify({
+          agentType: 'test-agent',
+          artifactIds: [],
+          taskDescription: 'Test',
+          experienceId: 'test-exp',
+          sessionId: 'test-session',
+          delegationId: 'test-delegation'
+        }),
+        headers: {
+          'content-type': 'application/json'
+        }
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(500);
+
+      expect(fireObjectiveSignal).not.toHaveBeenCalled();
     });
   });
 

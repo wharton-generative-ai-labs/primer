@@ -9,13 +9,13 @@ const logger = createModuleLogger('custom-component-tool');
  * 
  * Actions:
  * - list: List available components defined in the experience (server-side)
- * - create: Instantiate a component, returns instanceId for use with 'present' tool
+ * - create: Instantiate a component and surface it as the active document
  * - updateState: Update component state (agent-controlled)
  * - getState: Read current component state
  * - clearCache: Clear compiled component cache (force reload on next create)
  * 
- * For window management (show/hide/move/resize/destroy), use the 'present' tool.
- * For observing active components on screen, use the 'observe' tool.
+ * Use slide.hide/reveal for document section visibility and observe to inspect
+ * the active component/document state.
  * 
  * @param {object} args - The arguments for the tool
  * @param {string} args.action - The action to perform: 'list', 'create', 'updateState', 'getState', 'clearCache'

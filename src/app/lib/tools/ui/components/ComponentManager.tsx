@@ -177,6 +177,56 @@ export const getActiveComponentInstances = (): ComponentInstance[] => {
 };
 
 /**
+ * Strip import and export statements from component JSX before Babel compilation.
+ *
+ * Components are executed in a sandboxed `new Function()` scope where React,
+ * hooks, and shadcn/ui components are already injected as parameters. Any
+ * `import` statement left in the code will be transpiled by Babel into a
+ * variable declaration that collides with the injected scope bindings,
+ * causing "Identifier '...' has already been declared" errors at runtime.
+ *
+ * `[\s\S]` is used instead of `.` so that the pattern crosses newlines
+ * and multi-line named imports are fully removed:
+ *
+ *   import {
+ *     useState,
+ *     useEffect
+ *   } from 'react';
+ */
+export function stripImportsFromComponent(jsxCode: string): {
+  cleanedCode: string;
+  defaultExportName: string | null;
+} {
+  let defaultExportName: string | null = null;
+
+  const defaultFunctionMatch = jsxCode.match(/export\s+default\s+function\s+(\w+)/);
+  if (defaultFunctionMatch) {
+    defaultExportName = defaultFunctionMatch[1];
+  }
+
+  if (!defaultExportName) {
+    const defaultClassMatch = jsxCode.match(/export\s+default\s+class\s+(\w+)/);
+    if (defaultClassMatch) {
+      defaultExportName = defaultClassMatch[1];
+    }
+  }
+
+  if (!defaultExportName) {
+    const defaultIdentifierMatch = jsxCode.match(/export\s+default\s+([A-Z]\w*)\s*;/);
+    if (defaultIdentifierMatch) {
+      defaultExportName = defaultIdentifierMatch[1];
+    }
+  }
+
+  const cleanedCode = jsxCode
+    .replace(/import\s+[\s\S]*?from\s+['"].*?['"];?\s*/g, '')
+    .replace(/export\s+default\s+/g, '')
+    .replace(/export\s+\{[^}]*\}\s*;?\s*/g, '');
+
+  return { cleanedCode, defaultExportName };
+}
+
+/**
  * ComponentManager class - manages component lifecycle.
  */
 class ComponentManager {
@@ -269,37 +319,7 @@ class ComponentManager {
 
       const Babel = (window as any).Babel;
 
-      // Strip import and export statements before compilation
-      // Remove: import ... from '...'
-      // Keep track of what was exported as default
-      let defaultExportName: string | null = null;
-      
-      // Check for: export default function ComponentName
-      const defaultFunctionMatch = jsxCode.match(/export\s+default\s+function\s+(\w+)/);
-      if (defaultFunctionMatch) {
-        defaultExportName = defaultFunctionMatch[1];
-      }
-      
-      // Check for: export default class ComponentName
-      if (!defaultExportName) {
-        const defaultClassMatch = jsxCode.match(/export\s+default\s+class\s+(\w+)/);
-        if (defaultClassMatch) {
-          defaultExportName = defaultClassMatch[1];
-        }
-      }
-      
-      // Check for: export default Identifier (arrow functions assigned to const/let/var)
-      if (!defaultExportName) {
-        const defaultIdentifierMatch = jsxCode.match(/export\s+default\s+([A-Z]\w*)\s*;/);
-        if (defaultIdentifierMatch) {
-          defaultExportName = defaultIdentifierMatch[1];
-        }
-      }
-      
-      const cleanedCode = jsxCode
-        .replace(/import\s+.*?from\s+['"].*?['"];?\s*/g, '')
-        .replace(/export\s+default\s+/g, '')
-        .replace(/export\s+\{[^}]*\}\s*;?\s*/g, '');
+      const { cleanedCode, defaultExportName } = stripImportsFromComponent(jsxCode);
 
       // Transform JSX to React.createElement calls
       const result = Babel.transform(cleanedCode, {

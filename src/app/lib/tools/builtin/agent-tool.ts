@@ -8,9 +8,36 @@
  */
 
 import { ToolResponse, ToolContext } from '@/app/lib/tools/types';
+import {
+  computePhaseMemberships,
+  findContainingPhase,
+  isAgentInPhase,
+} from '@/app/lib/workflow-phases';
 import { createModuleLogger } from '@/lib/logger';
 
 const logger = createModuleLogger('agent-tool');
+
+/**
+ * Build phase-membership info for the current request, or `null` when the
+ * experience has no phases / context lacks the phase accessors. When `null`,
+ * transfer behaves exactly as it did pre-phases (no phase-based filtering).
+ */
+function getPhaseGate(context: ToolContext): {
+  currentPhaseId: string;
+  memberships: ReturnType<typeof computePhaseMemberships>;
+  phases: ReturnType<NonNullable<ToolContext['getWorkflowPhases']>>;
+} | null {
+  if (!context.getWorkflowPhases || !context.getCurrentWorkflowPhase) {
+    return null;
+  }
+  const phases = context.getWorkflowPhases();
+  if (!phases || phases.length === 0) return null;
+  const current = context.getCurrentWorkflowPhase();
+  if (!current?.id) return null;
+  if (!context.agents) return null;
+  const memberships = computePhaseMemberships(phases, context.agents);
+  return { currentPhaseId: current.id, memberships, phases };
+}
 
 /**
  * @tool agent
@@ -50,22 +77,29 @@ export async function agent(args: {
                 )
             );
 
+            const phaseGate = getPhaseGate(context);
+
             const agentList = Object.entries(context.agents as Record<string, {
                 name: string;
                 publicDescription?: string;
+                delegationContract?: string;
                 type?: string;
             }>).map(([key, agentConfig]) => {
                 const isSelf = key === context.selectedAgentKey;
                 const isBackend = agentConfig.type === 'backend';
-                const isTransferTarget = !isSelf && !isBackend && (
+                const isDownstream = !isSelf && !isBackend && (
                     downstreamRefs.has(key.toLowerCase()) || downstreamRefs.has(agentConfig.name?.toLowerCase())
                 );
+                const inPhase = phaseGate
+                    ? isAgentInPhase(phaseGate.memberships, phaseGate.currentPhaseId, key)
+                    : true;
+                const isTransferTarget = isDownstream && inPhase;
 
                 const available_actions: string[] = [];
                 if (isTransferTarget) available_actions.push('transfer');
                 if (isBackend) available_actions.push('delegate');
 
-                return {
+                const entry: Record<string, unknown> = {
                     key,
                     name: agentConfig.name,
                     type: agentConfig.type || 'frontend',
@@ -73,15 +107,45 @@ export async function agent(args: {
                     is_current: isSelf,
                     available_actions,
                 };
+
+                // Backend agents may declare a delegationContract — the contract
+                // for invoking them via `agent({ action: 'delegate' })`. Surface
+                // it here so orchestrators read the call shape from the agent's
+                // own config instead of carrying duplicate prose in their prompt.
+                if (isBackend && agentConfig.delegationContract) {
+                    entry.delegation_contract = agentConfig.delegationContract;
+                }
+
+                // Phase hint: when phases are active and this downstream agent is
+                // gated out by phase boundary, point the LLM at the right tool.
+                if (phaseGate && isDownstream && !inPhase) {
+                    const containingPhaseId = findContainingPhase(
+                        phaseGate.phases,
+                        phaseGate.memberships,
+                        key,
+                    );
+                    entry.outside_current_phase = true;
+                    entry.transfer_blocked_reason = containingPhaseId
+                        ? `${key} belongs to phase "${containingPhaseId}". Use workflowPhase.set with phase="${containingPhaseId}" to move there.`
+                        : `${key} is outside the current phase. Use workflowPhase.nextPhase to move forward.`;
+                }
+
+                return entry;
             });
+
+            const data: Record<string, unknown> = {
+                current_agent: context.selectedAgentKey,
+                agents: agentList,
+                count: agentList.length,
+            };
+            if (phaseGate) {
+                data.current_phase = phaseGate.currentPhaseId;
+                data.phase_filtered = true;
+            }
 
             return {
                 status: 'success',
-                data: {
-                    current_agent: context.selectedAgentKey,
-                    agents: agentList,
-                    count: agentList.length
-                }
+                data,
             };
         }
 
@@ -117,14 +181,28 @@ export async function agent(args: {
                 };
             }
 
-            const needle = args.destination!.toLowerCase();
             const agentEntries = Object.entries(context.agents as Record<string, { name: string }>);
+            // Normalise by lowercasing and collapsing whitespace/underscores
+            // so "Adam Ingram", "adam_ingram", and "adam-ingram" all resolve
+            // to the same key. The AI tends to mix these up (scene filenames
+            // use underscores; the agent's display name uses a space).
+            const normalize = (s: string | undefined) =>
+                (s ?? '').toLowerCase().replace(/[\s_-]+/g, '_').replace(/^_|_$/g, '');
+            const needle = normalize(args.destination);
             const destinationAgentKey =
-                agentEntries.find(([, cfg]) => cfg.name?.toLowerCase() === needle)?.[0] ||
-                agentEntries.find(([key]) => key.toLowerCase() === needle)?.[0];
+                agentEntries.find(([, cfg]) => normalize(cfg.name) === needle)?.[0] ||
+                agentEntries.find(([key]) => normalize(key) === needle)?.[0];
 
             if (!destinationAgentKey) {
-                logger.warn({ destination: args.destination }, 'agent transfer error: Could not find agent');
+                const validDestinations = (currentAgent.downstreamAgents || [])
+                    .map((a: string | { name: string }) =>
+                        typeof a === 'string' ? a : a.name
+                    )
+                    .filter(Boolean);
+                logger.warn(
+                    { destination: args.destination, validDestinations },
+                    'agent transfer error: Could not find agent'
+                );
                 return {
                     status: 'error',
                     data: {
@@ -132,7 +210,7 @@ export async function agent(args: {
                         destination_agent: null,
                         rationale: args.rationale,
                         context: args.conversationContext,
-                        error: `Could not find agent with name: ${args.destination}`
+                        error: `Could not find agent "${args.destination}". Valid downstream agents from here: ${validDestinations.join(', ') || '(none)'}`
                     }
                 };
             }
@@ -147,7 +225,15 @@ export async function agent(args: {
             );
 
             if (!isValidDownstreamAgent) {
-                logger.warn({ destination: args.destination }, 'agent transfer error: Invalid downstream agent');
+                const validDestinations = (currentAgent.downstreamAgents || [])
+                    .map((a: string | { name: string }) =>
+                        typeof a === 'string' ? a : a.name
+                    )
+                    .filter(Boolean);
+                logger.warn(
+                    { destination: args.destination, validDestinations },
+                    'agent transfer error: Invalid downstream agent'
+                );
                 return {
                     status: 'error',
                     data: {
@@ -155,7 +241,48 @@ export async function agent(args: {
                         destination_agent: null,
                         rationale: args.rationale,
                         context: args.conversationContext,
-                        error: `Invalid downstream agent: ${args.destination}`
+                        error: `"${args.destination}" is not a downstream agent from here. Valid downstream agents: ${validDestinations.join(', ') || '(none)'}`
+                    }
+                };
+            }
+
+            // Phase-boundary check: in a phased experience, refuse transfers
+            // that would cross into another phase. The agent should call
+            // `workflowPhase.set` (or `nextPhase` if the destination has no
+            // discoverable phase) instead, which also drives the proper agent
+            // switch as a side effect.
+            const phaseGate = getPhaseGate(context);
+            if (
+                phaseGate &&
+                !isAgentInPhase(phaseGate.memberships, phaseGate.currentPhaseId, destinationAgentKey)
+            ) {
+                const containingPhaseId = findContainingPhase(
+                    phaseGate.phases,
+                    phaseGate.memberships,
+                    destinationAgentKey,
+                );
+                const pointer = containingPhaseId
+                    ? `Use workflowPhase.set with phase="${containingPhaseId}" to move there.`
+                    : 'Use workflowPhase.nextPhase to move forward instead.';
+                logger.warn(
+                    {
+                        destinationAgentKey,
+                        currentPhase: phaseGate.currentPhaseId,
+                        destinationPhase: containingPhaseId,
+                    },
+                    'agent transfer error: cross-phase target'
+                );
+                return {
+                    status: 'error',
+                    data: {
+                        did_transfer: false,
+                        destination_agent: null,
+                        rationale: args.rationale,
+                        context: args.conversationContext,
+                        error: `"${destinationAgentKey}" is outside the current workflow phase ("${phaseGate.currentPhaseId}"). ${pointer}`,
+                        suggested_tool: 'workflowPhase',
+                        suggested_action: containingPhaseId ? 'set' : 'nextPhase',
+                        suggested_phase: containingPhaseId,
                     }
                 };
             }
@@ -168,7 +295,9 @@ export async function agent(args: {
             if (context.setQueuedAgentTransfer) {
                 context.setQueuedAgentTransfer(destinationAgentKey);
             }
-            if (context.addTranscriptBreadcrumb) {
+            if (context.addTranscriptHandoff) {
+                context.addTranscriptHandoff(fromName, toName, args.rationale);
+            } else if (context.addTranscriptBreadcrumb) {
                 context.addTranscriptBreadcrumb(
                     "Agent transfer queued",
                     { from: fromName, to: toName, rationale: args.rationale }
@@ -196,6 +325,71 @@ export async function agent(args: {
                     status: 'error',
                     data: { error: 'agentType is required for delegate action' }
                 };
+            }
+
+            // Backend-context refusal. The actual delegate() implementation
+            // depends on browser globals (sessionStorage, the socket.io
+            // client). When the agent tool runs inside a backend agent (Node,
+            // no browser globals) we reject up-front with a clear pointer so
+            // the calling agent gets a useful tool result rather than a
+            // misleading "no active session" failure deep in delegate().
+            if (typeof sessionStorage === 'undefined') {
+                return {
+                    status: 'error',
+                    data: {
+                        error: 'agent.delegate is only callable from the frontend orchestrator. Backend agents cannot spawn sub-delegations; return a result and let the orchestrator drive the next step.',
+                        suggested_pattern: 'Return a result; the orchestrator will drive the next step.',
+                    },
+                };
+            }
+
+            // Phase-scoped delegate gating. When the current phase declares
+            // `allowedDelegates`, only those agent keys may be invoked. This
+            // prevents earlier-phase agents from triggering later-phase
+            // subagents before the workflow has reached the right phase.
+            //
+            // Fail-closed semantics: if the experience declares phases at all
+            // but the context can't resolve a current phase, the client-side
+            // phase state isn't healthy (e.g. a stale tab whose
+            // WorkflowPhaseProvider didn't hydrate). Refuse delegation in that
+            // unhealthy state rather than silently bypass the gate. Without
+            // this, a tab in a bad state lets every delegate through and the
+            // orchestrator skips phase mechanics entirely.
+            if (context.getWorkflowPhases && context.getCurrentWorkflowPhase) {
+                const phases = context.getWorkflowPhases();
+                const current = context.getCurrentWorkflowPhase();
+
+                if (phases.length > 0 && !current?.id) {
+                    return {
+                        status: 'error',
+                        data: {
+                            error: 'Workflow phase state is not loaded — refusing delegation to fail-closed. Reload the page so the WorkflowPhaseProvider can hydrate before retrying.',
+                            phases_declared: phases.length,
+                            current_phase: null,
+                            suggested_action: 'reload',
+                        },
+                    };
+                }
+
+                if (current?.id) {
+                    const phaseConfig = phases.find((p) => p.id === current.id);
+                    const allowed = phaseConfig?.allowedDelegates;
+                    if (allowed && !allowed.includes(args.agentType)) {
+                        const allowedList = allowed.length > 0
+                            ? allowed.join(', ')
+                            : '(none)';
+                        return {
+                            status: 'error',
+                            data: {
+                                error: `Delegation to "${args.agentType}" is not allowed in phase "${current.id}". Allowed delegates here: ${allowedList}. To run this agent, advance the workflow to the phase where it belongs (workflowPhase nextPhase).`,
+                                current_phase: current.id,
+                                allowed_delegates: allowed,
+                                suggested_tool: 'workflowPhase',
+                                suggested_action: 'nextPhase',
+                            },
+                        };
+                    }
+                }
             }
 
             const { delegate } = await import('@/app/lib/tools/delegation/delegate');

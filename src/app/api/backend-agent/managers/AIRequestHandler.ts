@@ -104,7 +104,7 @@ export class AIRequestHandler {
             content: taskMessage
           }
         ],
-        temperature: experience.temperature,
+        ...(experience.temperature !== undefined && { temperature: experience.temperature }),
         tools: anthropicTools
       });
 
@@ -128,7 +128,7 @@ export class AIRequestHandler {
             content: taskMessage
           }
         ],
-        temperature: experience.temperature,
+        ...(experience.temperature !== undefined && { temperature: experience.temperature }),
         tools,
         tool_choice: "auto",
         stream: false
@@ -164,7 +164,7 @@ export class AIRequestHandler {
         max_tokens: 8192, // Higher limit for Claude to handle long content in tool calls
         system,
         messages: anthropicMessages,
-        temperature: experience.temperature,
+        ...(experience.temperature !== undefined && { temperature: experience.temperature }),
         tools: anthropicTools
       });
 
@@ -179,7 +179,7 @@ export class AIRequestHandler {
       const nextResponse = await openai.chat.completions.create({
         model: providerConfig.modelName,
         messages: allMessages,
-        temperature: experience.temperature,
+        ...(experience.temperature !== undefined && { temperature: experience.temperature }),
         tools,
         tool_choice: "auto",
         stream: false

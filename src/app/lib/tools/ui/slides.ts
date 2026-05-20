@@ -6,8 +6,7 @@ const logger = createModuleLogger('slide-tool');
 
 /**
  * @tool slide
- * @description Create slides to display content. Use 'show' to create a slide with markdown content, or 'showArtifact' to create a slide from an artifact. Returns slideId for use with 'present' tool for window management (hide/show/move/resize).
- * ALWAYS use slides to visualize information - it's far better than long text descriptions.
+ * @description Show and manage the document panel. Use 'show' to put markdown content in the active slot, 'showArtifact' to render an existing artifact, and 'reveal'/'hide' to toggle the panel without changing the active document.
  * @param {object} args - The arguments for the tool
  * @param {string} args.action - The action to perform: 'show', 'showArtifact'
  * @param {string} args.title - Slide title
@@ -18,10 +17,12 @@ const logger = createModuleLogger('slide-tool');
  */
 export async function slide(
   args: {
-    action: 'show' | 'showArtifact';
+    action: 'show' | 'showArtifact' | 'list' | 'close' | 'hide' | 'reveal';
     title?: string;
     content?: string;
     artifactId?: string;
+    /** Document id (from `list`) to close. */
+    id?: string;
   },
   context: ToolContext
 ): Promise<ToolResponse> {
@@ -35,12 +36,20 @@ export async function slide(
     }
 
     // Validate action
-    const validActions = ['show', 'showArtifact'];
+    const validActions = ['show', 'showArtifact', 'list', 'close', 'hide', 'reveal'];
+    if (!args.action) {
+      return {
+        status: 'error',
+        data: {
+          error: `slide tool requires an 'action' parameter. Valid actions are: ${validActions.join(', ')}. Example: slide({ action: 'showArtifact', artifactId: '<id>' }) or slide({ action: 'show', title: '...', content: '...' }).`
+        }
+      };
+    }
     if (!validActions.includes(args.action)) {
       return {
         status: 'error',
-        data: { 
-          error: `Invalid action: ${args.action}. Valid actions are: ${validActions.join(', ')}` 
+        data: {
+          error: `Invalid action: ${args.action}. Valid actions are: ${validActions.join(', ')}`
         }
       };
     }
@@ -62,28 +71,35 @@ export async function slide(
     // Handle different actions
     switch (args.action) {
       case 'show': {
-        // Validate required parameters
-        if (!args.title || !args.content) {
+        // Only the title is strictly required. If content is missing or
+        // blank the AI probably meant "just a title slide" (common pattern
+        // when the agent wants to announce a section before filling in
+        // details); render the title as an H1 rather than hard-erroring.
+        if (!args.title) {
           return {
             status: 'error',
-            data: { error: 'title and content are required for show action' }
+            data: { error: 'title is required for show action' }
           };
         }
+        const content =
+          args.content && args.content.trim().length > 0
+            ? args.content
+            : `# ${args.title}\n`;
 
         // Create a pending request that will resolve when we receive the result from the client
         const resultPromise = requestManager.createPendingRequest(
-          callId, 
-          'tool_result', 
+          callId,
+          'tool_result',
           5000
         ) as Promise<{ status: 'success' | 'error'; data: any }>;
 
         // Send the slide creation command to the client via socket
         context.sendClientEvent({
           type: 'ui.slide.create',
-          data: { 
-            callId, 
+          data: {
+            callId,
             title: args.title,
-            content: args.content
+            content,
           }
         });
 
@@ -169,6 +185,60 @@ export async function slide(
         return result;
       }
 
+      case 'list': {
+        const resultPromise = requestManager.createPendingRequest(
+          callId,
+          'tool_result',
+          5000
+        ) as Promise<{ status: 'success' | 'error'; data: any }>;
+        context.sendClientEvent({
+          type: 'ui.slide.list',
+          data: { callId },
+        });
+        return await resultPromise;
+      }
+
+      case 'close': {
+        if (!args.id) {
+          return {
+            status: 'error',
+            data: { error: 'id is required for close action' },
+          };
+        }
+        const resultPromise = requestManager.createPendingRequest(
+          callId,
+          'tool_result',
+          5000
+        ) as Promise<{ status: 'success' | 'error'; data: any }>;
+        context.sendClientEvent({
+          type: 'ui.slide.close',
+          data: { callId, id: args.id },
+        });
+        return await resultPromise;
+      }
+
+      case 'hide':
+      case 'reveal': {
+        if (context.setDocumentVisible) {
+          context.setDocumentVisible(args.action === 'reveal');
+          return {
+            status: 'success',
+            data: { visible: args.action === 'reveal' },
+          };
+        }
+
+        const resultPromise = requestManager.createPendingRequest(
+          callId,
+          'tool_result',
+          5000
+        ) as Promise<{ status: 'success' | 'error'; data: any }>;
+        context.sendClientEvent({
+          type: 'ui.document.visibility',
+          data: { callId, visible: args.action === 'reveal' },
+        });
+        return await resultPromise;
+      }
+
       default:
         return {
           status: 'error',
@@ -185,4 +255,3 @@ export async function slide(
     };
   }
 }
-

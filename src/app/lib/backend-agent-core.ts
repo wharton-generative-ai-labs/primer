@@ -16,8 +16,10 @@ import {
   ToolRegistrationManager,
   ToolExecutionManager,
   AIRequestHandler,
+  elideStaleToolResults,
 } from '@/app/api/backend-agent/managers';
 import type { LoadedExperience } from '@/app/api/backend-agent/managers';
+import { fireObjectiveSignal } from '@/app/lib/workflow-phases/objectiveSignals';
 
 const logger = createModuleLogger('backend-agent-core');
 
@@ -61,6 +63,7 @@ export async function executeBackendAgent(
 ): Promise<AgentExecutionResult> {
   const {
     experienceId,
+    sessionId,
     agentKey,
     taskDescription,
     artifactIds = [],
@@ -77,8 +80,12 @@ export async function executeBackendAgent(
   const agentName = experience.agentConfig.name || agentKey;
   callbacks?.onStart?.(agentName);
 
-  // Initialize tools
-  const tools = await ToolRegistrationManager.initializeTools(experience.agentConfig);
+  // Initialize tools — pass experience-level custom toolSets so agents can
+  // reference experience-specific bundles (e.g. "design-agent-tools").
+  const tools = await ToolRegistrationManager.initializeTools(
+    experience.agentConfig,
+    experience.config.toolSets,
+  );
 
   // Get provider configuration
   const providerConfig = AIRequestHandler.getProviderConfig(experience);
@@ -204,6 +211,11 @@ export async function executeBackendAgent(
 
     allMessages.push(...toolResponses);
 
+    // Keep history bounded: elide stale tool results once we're past the
+    // floor, and only when a turn's payload busts the rolling budget. The
+    // most recent turns stay verbatim; small older turns survive too.
+    elideStaleToolResults(allMessages);
+
     // Next AI request
     callbacks?.onThinking?.();
 
@@ -223,6 +235,18 @@ export async function executeBackendAgent(
     { agentName, totalToolCalls, iterationCount, messageLength: finalMessage.length },
     'Backend agent completed'
   );
+
+  // Best-effort hook: fire the delegateSuccess objective signal at the
+  // SUCCESSFUL exit of executeBackendAgent. Failures inside the hook are
+  // swallowed (see fireObjectiveSignal), so a hook glitch can't break the
+  // delegate's return path. Use the resolved agent key (the one we actually
+  // ran), not the raw agentType arg — they're the same here, but the spec
+  // pins this for forward compatibility with aliasing.
+  void fireObjectiveSignal({
+    experienceId,
+    sessionId,
+    signal: { kind: 'delegateSuccess', resolvedAgentKey: agentKey },
+  });
 
   return { message: finalMessage, totalToolCalls };
 }

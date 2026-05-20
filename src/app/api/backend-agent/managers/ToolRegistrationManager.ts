@@ -40,20 +40,28 @@ export class ToolRegistrationManager {
   /**
    * Get tools for the specified agent based on its tool configuration.
    * Supports both legacy (toolGroups) and new (toolSets) formats.
+   *
+   * @param agentConfig The agent's config (resolved by AgentConfigBuilder).
+   * @param customToolSets Optional map of custom toolSet names → tool name
+   *   arrays, declared in the experience.json `toolSets` block. Required when
+   *   the agent references a custom toolSet that is not in PRESET_TOOL_SETS.
    */
-  static async getToolsForAgent(agentConfig: AgentConfig): Promise<ToolDefinition[]> {
+  static async getToolsForAgent(
+    agentConfig: AgentConfig,
+    customToolSets?: Record<string, string[]>,
+  ): Promise<ToolDefinition[]> {
     const { getToolsForGroups, getToolsForNames, expandToolSets, getPresetToolSet } = await import('@/app/lib/tools/groups');
-    
+
     let allowedTools;
 
     // New format: toolSets (configVersion 2+)
     if (agentConfig.toolSets && agentConfig.toolSets.length > 0) {
       logger.debug({ toolSets: agentConfig.toolSets }, 'Using toolSets configuration');
-      
-      // Expand toolSets to tool names
-      // Note: We don't have access to the full experience config here, so we can only use preset toolSets
-      // Custom toolSets from experience.json would need to be passed through if needed
-      const toolNames = expandToolSets(agentConfig.toolSets);
+
+      // Expand toolSets to tool names. Custom toolSets from the experience's
+      // top-level `toolSets` block must be threaded through so agents can
+      // reference experience-specific named bundles (e.g. "design-agent-tools").
+      const toolNames = expandToolSets(agentConfig.toolSets, customToolSets);
       allowedTools = getToolsForNames(toolNames);
       
       logger.debug({ toolNames, toolCount: allowedTools.length }, 'Tools from toolSets');
@@ -100,10 +108,17 @@ export class ToolRegistrationManager {
   /**
    * Initialize tools for backend agent execution
    * Registers all tools and returns tools for the specific agent
+   *
+   * @param agentConfig The agent's config.
+   * @param customToolSets Optional experience-level custom toolSets — pass
+   *   `experience.config.toolSets` here so custom toolSet names resolve.
    */
-  static async initializeTools(agentConfig: AgentConfig): Promise<ToolDefinition[]> {
+  static async initializeTools(
+    agentConfig: AgentConfig,
+    customToolSets?: Record<string, string[]>,
+  ): Promise<ToolDefinition[]> {
     await this.registerAllBackendTools();
-    return this.getToolsForAgent(agentConfig);
+    return this.getToolsForAgent(agentConfig, customToolSets);
   }
 }
 

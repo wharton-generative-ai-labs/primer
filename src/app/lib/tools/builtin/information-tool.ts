@@ -6,6 +6,11 @@
  * 
  * Backend-first implementation: data is stored on the server,
  * persisted to disk in session_data/{sessionId}/information.json
+ *
+ * SYNC: the dev harness duplicates this handler at
+ * src/app/lib/harness/tools.ts (against an in-memory state.information
+ * map). Any schema change here — action names, required params,
+ * response shape — must be mirrored there or the harness will drift.
  */
 
 import { ToolResponse, ToolContext } from '@/app/lib/tools/types';

@@ -10,6 +10,7 @@ export { ToolRegistrationManager } from './ToolRegistrationManager';
 export { DelegationStatusManager } from './DelegationStatusManager';
 export { ToolExecutionManager } from './ToolExecutionManager';
 export { AIRequestHandler } from './AIRequestHandler';
+export { elideStaleToolResults } from './MessageHistoryManager';
 
 export type {
   BackendAgentRequest,

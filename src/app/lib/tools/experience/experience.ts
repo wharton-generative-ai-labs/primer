@@ -1,5 +1,53 @@
 import { ToolContext, ToolResponse } from '@/app/lib/tools/types';
 import { ExperienceToolContext } from './types';
+import { writeBuiltExperienceArtifact } from './builtExperienceArtifact';
+
+const ASSET_CLASS_EXTENSIONS: Record<string, ReadonlySet<string>> = {
+  image: new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp']),
+  doc: new Set(['md', 'txt']),
+};
+
+function getAssetClass(extension: string): string | null {
+  const ext = extension.toLowerCase();
+  for (const [cls, exts] of Object.entries(ASSET_CLASS_EXTENSIONS)) {
+    if (exts.has(ext)) return cls;
+  }
+  return null;
+}
+
+async function removeSameStemSiblings(args: {
+  listResources: ExperienceToolContext['listResources'];
+  deleteFile: ExperienceToolContext['deleteFile'];
+  experienceId: string;
+  destinationDir: string;
+  newFileName: string;
+}): Promise<string[]> {
+  const path = await import('path');
+  const parsed = path.parse(args.newFileName);
+  const stem = parsed.name;
+  const newExt = parsed.ext.replace(/^\./, '').toLowerCase();
+  const cls = getAssetClass(newExt);
+  if (!cls || !stem) return [];
+
+  const classExts = ASSET_CLASS_EXTENSIONS[cls];
+  const normalizedDir = args.destinationDir.replace(/^\.\/?/, '').replace(/\/$/, '');
+
+  const resources = await args.listResources(args.experienceId);
+  const removed: string[] = [];
+  for (const resource of resources) {
+    if (resource.type !== 'file') continue;
+    const resPath = resource.path;
+    if (path.dirname(resPath) !== normalizedDir) continue;
+    const resParsed = path.parse(resPath);
+    if (resParsed.name !== stem) continue;
+    const resExt = resParsed.ext.replace(/^\./, '').toLowerCase();
+    if (resExt === newExt) continue; // same file — let createFile overwrite
+    if (!classExts.has(resExt)) continue; // different asset class — leave alone
+    await args.deleteFile(args.experienceId, resPath);
+    removed.push(resPath);
+  }
+  return removed;
+}
 
 /**
  * @tool createExperience
@@ -20,6 +68,7 @@ export async function createExperience(_args: any, context: ToolContext): Promis
   
   try {
     const experienceId = await experienceContext.createExperience();
+    await writeBuiltExperienceArtifact(context, experienceId);
     return {
       status: 'success',
       data: {
@@ -57,6 +106,7 @@ export async function copyTemplate(
   
   try {
     const newExperienceId = await experienceContext.copyTemplate(args.templateExperienceId);
+    await writeBuiltExperienceArtifact(context, newExperienceId);
     return {
       status: 'success',
       data: {
@@ -518,6 +568,17 @@ export async function deployArtifact(args: {
             await experienceContext.createDirectory(targetExperienceId, destinationDir);
         }
 
+        // Sweep same-stem siblings within the same asset class (e.g., when deploying
+        // a generated mentor-scene.png, drop the template's mentor-scene.jpg). Keeps
+        // cross-class pairs intact (e.g., mentor.md + mentor.png in the same dir).
+        const removedSiblings = await removeSameStemSiblings({
+            listResources: experienceContext.listResources,
+            deleteFile: experienceContext.deleteFile,
+            experienceId: targetExperienceId,
+            destinationDir,
+            newFileName: fileName,
+        });
+
         // Copy the content
         if (isBinaryFileType(artifact.type)) {
             // For binary files, pass the base64 content directly with encoding flag
@@ -535,7 +596,8 @@ export async function deployArtifact(args: {
                 artifactName: artifact.name,
                 artifactType: artifact.type,
                 destinationPath: fullDestinationPath,
-                fileName: fileName
+                fileName: fileName,
+                ...(removedSiblings.length > 0 ? { removedSiblings } : {}),
             }
         };
     } catch (error) {
@@ -546,6 +608,83 @@ export async function deployArtifact(args: {
             data: { error: error instanceof Error ? error.message : 'Failed to deploy artifact to experience' }
         };
     }
+}
+
+/**
+ * @tool deployBuildArtifacts
+ * @description Platform-side discovery + deploy for the canonical build pipeline. The Casting Director publishes character prompts under the slugs `mentor_prompt` / `practice_prompt` / `feedback_prompt`; the Image Generation Agent publishes scenes under `mentor_scene` / `practice_scene` / `feedback_scene`. This tool finds them by slug in the current session, then deploys each to its conventional destination in the new experience — replacing the six per-call `deployArtifact` invocations the experience-builder used to make. Eliminates the UUID-fabrication failure mode by removing the model from the artifact-id-passing path entirely.
+ * @param {object} args - The arguments for the tool
+ * @param {string} args.experienceId - Optional: target experience slug. Defaults to the current experience id from context.
+ * @returns {Promise<ToolResponse>} `{ deployed, failed, missing }`. Status is `success` only when all six canonical artifacts deploy cleanly.
+ */
+export async function deployBuildArtifacts(
+    args: { experienceId?: string },
+    context: ToolContext,
+): Promise<ToolResponse> {
+    const targetExperienceId = args.experienceId || context.experienceId;
+    if (!targetExperienceId) {
+        return {
+            status: 'error',
+            data: { error: 'experienceId must be provided in args or available in context' },
+        };
+    }
+
+    const { discoverBuildArtifacts } = await import('./discoverBuildArtifacts');
+
+    let plan;
+    try {
+        plan = await discoverBuildArtifacts(context);
+    } catch (error) {
+        return {
+            status: 'error',
+            data: {
+                error: error instanceof Error
+                    ? `discoverBuildArtifacts failed: ${error.message}`
+                    : 'discoverBuildArtifacts failed',
+            },
+        };
+    }
+
+    const deployed: Array<{ artifactId: string; destinationPath: string }> = [];
+    const failed: Array<{ artifactId: string; error: string }> = [];
+
+    for (const asset of [...plan.prompts, ...plan.scenes]) {
+        const result = await deployArtifact(
+            {
+                artifactId: asset.artifactId,
+                experienceId: targetExperienceId,
+                destinationPath: asset.destinationPath,
+                fileName: asset.fileName,
+            },
+            context,
+        );
+
+        if (result.status === 'success') {
+            deployed.push({
+                artifactId: asset.artifactId,
+                destinationPath: result.data.destinationPath ?? `${asset.destinationPath}/${asset.fileName}`,
+            });
+        } else {
+            failed.push({
+                artifactId: asset.artifactId,
+                error: typeof result.data?.error === 'string'
+                    ? result.data.error
+                    : 'unknown deployArtifact error',
+            });
+        }
+    }
+
+    const allSucceeded = failed.length === 0 && plan.missing.length === 0;
+
+    return {
+        status: allSucceeded ? 'success' : 'error',
+        data: {
+            experienceId: targetExperienceId,
+            deployed,
+            failed,
+            missing: plan.missing,
+        },
+    };
 }
 
 /**

@@ -241,10 +241,20 @@ export async function getFileInfo(args: { fileInfoUrl: string }, context: ToolCo
     try {
         const sessionId = getPluginSessionId();
         
-        // Extract filename from URL (format: /api/file-info/{fileName})
-        const fileName = args.fileInfoUrl.split('/').pop();
-        if (!fileName) {
+        // Accept either a real `/api/file-info/<fileName>` URL or a bare
+        // filename (LLMs frequently echo just the filename). Also tolerate
+        // URL-encoded names — without decoding, the on-disk lookup uses the
+        // encoded form (e.g. "History%20Class%20Plan.docx") and silently
+        // misses files with spaces.
+        const rawFileName = args.fileInfoUrl.trim().split('/').pop();
+        if (!rawFileName) {
             throw new Error('Invalid fileInfoUrl: could not extract filename');
+        }
+        let fileName = rawFileName;
+        try {
+            fileName = decodeURIComponent(rawFileName);
+        } catch {
+            // Stray '%' in already-decoded names — fall back to the raw form.
         }
         
         // Dynamic imports for server-side modules

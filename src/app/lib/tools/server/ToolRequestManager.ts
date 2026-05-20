@@ -13,7 +13,7 @@ interface PendingRequest<T = any> {
   resolve: (value: T) => void;
   reject: (error: Error) => void;
   timeout: NodeJS.Timeout;
-  type: 'observe' | 'tool_result';
+  type: 'tool_result';
 }
 
 class ToolRequestManager {
@@ -24,7 +24,7 @@ class ToolRequestManager {
    */
   createPendingRequest<T>(
     callId: string,
-    type: 'observe' | 'tool_result',
+    type: 'tool_result',
     timeoutMs: number = 5000
   ): Promise<T> {
     return new Promise<T>((resolve, reject) => {

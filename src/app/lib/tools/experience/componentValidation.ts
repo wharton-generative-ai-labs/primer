@@ -6,12 +6,51 @@
  * that cause components to fail silently or with cryptic error messages.
  */
 
+import * as ts from 'typescript';
+
 export interface ValidationIssue {
   type: 'error' | 'warning';
   category: string;
   message: string;
   suggestion?: string;
   line?: number;
+  /** Number of underlying occurrences aggregated into this issue (used by migration tooling). */
+  count?: number;
+}
+
+/**
+ * Strip single-line and multi-line comments from JSX/TSX code using TypeScript's
+ * compiler scanner. This correctly handles comments inside template literals,
+ * regex literals, and protocol-relative URLs — unlike naive regex approaches.
+ * Falls back to the original code if the scanner throws on malformed input.
+ */
+function stripComments(code: string): string {
+  try {
+    const scanner = ts.createScanner(
+      ts.ScriptTarget.Latest,
+      /* skipTrivia */ false,
+      ts.LanguageVariant.JSX,
+      code,
+    );
+    const ranges: Array<[number, number]> = [];
+    let kind: ts.SyntaxKind;
+    while ((kind = scanner.scan()) !== ts.SyntaxKind.EndOfFileToken) {
+      if (
+        kind === ts.SyntaxKind.SingleLineCommentTrivia ||
+        kind === ts.SyntaxKind.MultiLineCommentTrivia
+      ) {
+        ranges.push([scanner.getTokenStart(), scanner.getTokenEnd()]);
+      }
+    }
+    // Splice from end so earlier indices stay valid.
+    let out = code;
+    for (const [start, end] of ranges.sort((a, b) => b[0] - a[0])) {
+      out = out.slice(0, start) + out.slice(end);
+    }
+    return out;
+  } catch {
+    return code;
+  }
 }
 
 export interface ValidationResult {
@@ -372,6 +411,98 @@ export function validateComponentCode(code: string, componentId: string): Valida
       message: 'Component uses useState but may not spread initialState',
       suggestion: 'Initialize state with: useState({ ...defaultValues, ...initialState })'
     });
+  }
+
+  // Theming rules — strip comments first so JSDoc examples don't self-trigger.
+  const codeWithoutComments = stripComments(code);
+
+  // 21. Hardcoded Tailwind palette classes without a dark: counterpart for the same utility.
+  // Matches utility-(palette-name)(-shade)? but NOT semantic tokens (bg-card, text-foreground, etc.)
+  // or Penn brand / chart tokens. File-wide: if dark:(utility)- appears anywhere for the same
+  // utility prefix, the whole file is considered covered for that prefix.
+  {
+    const utilityPrefixes = 'bg|text|border|ring|stroke|fill|from|to|via|divide|outline|placeholder|caret|accent|decoration|shadow';
+    const paletteNames = 'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black';
+    const paletteClassRe = new RegExp(
+      `\\b(${utilityPrefixes})-(${paletteNames})(?:-(?:50|100|200|300|400|500|600|700|800|900|950))?\\b`,
+      'g',
+    );
+    const darkCoverageRe = new RegExp(
+      `\\bdark:(${utilityPrefixes})-`,
+      'g',
+    );
+
+    // Collect covered utility prefixes (e.g. "bg", "text") from dark: variants.
+    const coveredPrefixes = new Set<string>();
+    let dm: RegExpExecArray | null;
+    while ((dm = darkCoverageRe.exec(codeWithoutComments)) !== null) {
+      coveredPrefixes.add(dm[1]);
+    }
+
+    const uncoveredMatches: string[] = [];
+    let pm: RegExpExecArray | null;
+    paletteClassRe.lastIndex = 0;
+    while ((pm = paletteClassRe.exec(codeWithoutComments)) !== null) {
+      const prefix = pm[1];
+      if (!coveredPrefixes.has(prefix)) {
+        uncoveredMatches.push(pm[0]);
+      }
+    }
+
+    if (uncoveredMatches.length > 0) {
+      const unique = [...new Set(uncoveredMatches)];
+      warnings.push({
+        type: 'warning',
+        category: 'theming',
+        message: `Found ${uncoveredMatches.length} hardcoded Tailwind palette class(es) without a dark: counterpart: ${unique.slice(0, 5).join(', ')}${unique.length > 5 ? '…' : ''}. These bake in a single light-mode color and break dark mode.`,
+        suggestion: 'For content-heavy UI use shadcn semantic tokens (bg-card, text-foreground, bg-muted, etc.). For decorative elements add a dark: variant for each utility prefix used (e.g. bg-blue-100 dark:bg-blue-800).',
+        count: uncoveredMatches.length,
+      });
+    }
+  }
+
+  // 22. Inline SVG attributes with hardcoded color values.
+  {
+    const svgColorRe = /\b(stroke|fill)=["'](#[0-9a-fA-F]{3,8}|[a-z]+)["']/g;
+    const svgMatches: string[] = [];
+    let sm: RegExpExecArray | null;
+    while ((sm = svgColorRe.exec(codeWithoutComments)) !== null) {
+      // Allow currentColor, none, transparent, inherit
+      const val = sm[2].toLowerCase();
+      if (!['currentcolor', 'none', 'transparent', 'inherit'].includes(val)) {
+        svgMatches.push(sm[0]);
+      }
+    }
+    if (svgMatches.length > 0) {
+      warnings.push({
+        type: 'warning',
+        category: 'theming',
+        message: `Found ${svgMatches.length} inline SVG attribute(s) with hardcoded colors: ${svgMatches.slice(0, 3).join(', ')}${svgMatches.length > 3 ? '…' : ''}. These ignore dark mode.`,
+        suggestion: 'Use stroke="currentColor" / fill="currentColor" so the SVG inherits the text color, or use a CSS variable like var(--chart-1).',
+        count: svgMatches.length,
+      });
+    }
+  }
+
+  // 22b. Runtime-computed dark: classes via template-literal interpolation or string concat.
+  // Tailwind's content scanner only sees literal class strings; runtime-built dark: classes
+  // are silently invisible and never reach the CSS output.
+  {
+    const runtimeDarkRe = /dark:\$\{|dark:[a-z-]*\$\{/g;
+    const rdMatches: string[] = [];
+    let rdm: RegExpExecArray | null;
+    while ((rdm = runtimeDarkRe.exec(codeWithoutComments)) !== null) {
+      rdMatches.push(rdm[0].slice(0, 40));
+    }
+    if (rdMatches.length > 0) {
+      errors.push({
+        type: 'error',
+        category: 'theming',
+        message: `Found ${rdMatches.length} runtime-computed dark: class(es). Tailwind's scanner only sees literal class strings — these dark variants will never be included in the CSS output.`,
+        suggestion: 'Store the full dark: variant as a literal string in your data object (e.g. { light: "bg-blue-100", dark: "bg-blue-800 dark:bg-blue-800" }) instead of building it at runtime.',
+        count: rdMatches.length,
+      });
+    }
   }
 
   // Compute stats

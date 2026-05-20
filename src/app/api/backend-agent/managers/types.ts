@@ -42,6 +42,12 @@ export interface ExperienceConfig {
     };
   };
   aiConfigurations?: Record<string, AIConfiguration>;
+  /**
+   * Custom toolSet definitions declared at the top level of experience.json.
+   * Map: toolSet name → array of tool names. Threaded through to
+   * `expandToolSets` so agents can reference experience-specific bundles.
+   */
+  toolSets?: Record<string, string[]>;
 }
 
 /**
@@ -108,7 +114,7 @@ export interface LoadedExperience {
   agentConfig: AgentConfig;
   instructions: string;
   aiConfig?: AIConfiguration;
-  temperature: number;
+  temperature?: number;
 }
 
 /**

@@ -28,21 +28,23 @@ const logger = createModuleLogger('tool-groups');
 const PRESET_TOOL_SETS: Record<string, string[]> = {
   'default': [
     'scene', 'information', 'file', 'artifact', 'checklist', 'agent', 'toast',
-    'observe', 'present', 'slide', 'celebrate', 'note', 'diagram',
-    'sound', 'research', 'customComponent', 'sessionEvent'
+    'observe', 'slide', 'celebrate', 'note', 'diagram',
+    'sound', 'research', 'customComponent', 'sessionEvent', 'workflowPhase',
+    'finishExperience'
   ],
   'frontend-default': [
     'scene', 'information', 'file', 'artifact', 'checklist', 'agent', 'toast',
-    'observe', 'present', 'slide', 'celebrate', 'note', 'diagram',
-    'sound', 'research', 'customComponent', 'sessionEvent'
+    'observe', 'slide', 'celebrate', 'note', 'diagram',
+    'sound', 'research', 'customComponent', 'sessionEvent', 'workflowPhase',
+    'finishExperience'
   ],
   'backend-default': [
     'scene', 'information', 'file', 'artifact', 'checklist', 'agent', 'toast',
-    'observe', 'present', 'slide',
+    'observe', 'slide', 'workflowPhase', 'finishExperience',
     // Experience management
     'createExperience', 'copyTemplate', 'createDirectory', 'createFile',
     'deleteDirectory', 'deleteFile', 'moveFile', 'moveDirectory',
-    'listResources', 'getResourceContent', 'deployArtifact',
+    'listResources', 'getResourceContent', 'deployArtifact', 'deployBuildArtifacts',
     'validateComponent', 'generateComponentStyles',
     'getTemplateAgentInstructions', 'listTemplateExperiences',
     // Matter compiler
@@ -172,7 +174,7 @@ const PLUGIN_TO_GROUP: Record<string, string> = {
  * @deprecated Only used for upgrading v1 configs to v2
  */
 const GROUP_TO_TOOLS: Record<string, string[]> = {
-  'builtin': ['scene', 'information', 'file', 'artifact', 'checklist', 'agent', 'toast', 'observe', 'present', 'slide', 'note'],
+  'builtin': ['scene', 'information', 'file', 'artifact', 'checklist', 'agent', 'toast', 'observe', 'slide', 'note', 'workflowPhase', 'finishExperience'],
   'celebrate': ['celebrate'],
   'delegation': [],
   'notes': ['note'],
@@ -183,7 +185,7 @@ const GROUP_TO_TOOLS: Record<string, string[]> = {
   'experience': [
     'createExperience', 'copyTemplate', 'createDirectory', 'createFile',
     'deleteDirectory', 'deleteFile', 'moveFile', 'moveDirectory',
-    'listResources', 'getResourceContent', 'deployArtifact',
+    'listResources', 'getResourceContent', 'deployArtifact', 'deployBuildArtifacts',
     'validateComponent', 'generateComponentStyles',
     'getTemplateAgentInstructions', 'listTemplateExperiences'
   ],
@@ -199,6 +201,14 @@ const GROUP_TO_TOOLS: Record<string, string[]> = {
   ],
   'session': ['sessionEvent']
 };
+
+/**
+ * Known v1 plugin package names. Used by validation to flag unknown plugins
+ * in `tools.plugins`.
+ */
+export function getKnownPluginNames(): string[] {
+  return Object.keys(PLUGIN_TO_GROUP);
+}
 
 /**
  * Convert v1 plugin names to group names.

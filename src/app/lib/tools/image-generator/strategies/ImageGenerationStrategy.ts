@@ -22,6 +22,24 @@ export interface ImageGenerationOptions {
   personGeneration?: 'dont_allow' | 'allow_adult' | 'allow_all';
 }
 
+export interface MultiTurnImageSpec {
+  name: string;
+  description: string;
+}
+
+export interface MultiTurnGenerationOptions {
+  visualStyle: string;
+  aspectRatio: string;
+  imageSpecs: MultiTurnImageSpec[];
+  additionalInstructions?: string;
+}
+
+export interface MultiTurnGenerationResult {
+  images: Array<{ data: string; metadata?: any }>;
+  text: string;
+  error?: string;
+}
+
 /**
  * Base interface for image generation strategies
  */
@@ -40,6 +58,11 @@ export interface ImageGenerationStrategy {
    * Generate an image with a specific model
    */
   generateImageWithModel(model: string, options: ImageGenerationOptions): Promise<ImageGenerationResult>;
+
+  /**
+   * Generate a sequence of images with a consistent visual style.
+   */
+  generateMultiTurn(options: MultiTurnGenerationOptions): Promise<MultiTurnGenerationResult>;
 
   /**
    * Check if this strategy supports the given model name

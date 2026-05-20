@@ -5,6 +5,7 @@
  */
 
 import { ToolRegistry } from '@/app/lib/ToolRegistry';
+import type { ExperienceConfig } from '@/app/lib/types';
 import {
   scene,
   file,
@@ -12,28 +13,43 @@ import {
   checklist,
   toast
 } from './builtin';
+import {
+  workflowPhase,
+  WORKFLOW_PHASE_ACTIONS,
+  WORKFLOW_PHASE_DESCRIPTION,
+} from './workflow-phase-tool';
+import {
+  finishExperience,
+  FINISH_EXPERIENCE_DESCRIPTION,
+} from './finish-experience-tool';
 import { createToolStub } from '@/app/lib/tools/client/tool-calling-shim';
 
 /**
  * Register client-safe builtin tools with the ToolRegistry.
  * This can be called from client contexts.
+ *
+ * Pass `config` to gate workflow-phase tools on experience config — see
+ * `registerBuiltinTools` for the rationale.
  */
-export async function registerClientBuiltinTools(): Promise<void> {
+export async function registerClientBuiltinTools(
+  config?: ExperienceConfig,
+): Promise<void> {
   const registry = ToolRegistry.getInstance();
+  const hasWorkflowPhases = (config?.workflowPhases?.length ?? 0) > 0;
 
   // Scene Management - consolidated tool with action parameter
   // Note: 'describe' action is server-only and will return an error
   await registry.register({
     type: 'function',
     name: 'scene',
-    description: 'Manage background scenes. Use discover to list available scenes, set to display one. Always set an appropriate scene at the start of a conversation.',
+    description: 'Manage the background scene panel. discover lists available scenes. set picks a scene and reveals the panel. reveal/hide toggle the panel without changing the selected scene. describe inspects a scene. addCustom/removeCustom manage custom scenes.',
     parameters: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
           description: 'The action to perform',
-          enum: ['discover', 'set', 'describe', 'addCustom', 'removeCustom']
+          enum: ['discover', 'set', 'reveal', 'hide', 'describe', 'addCustom', 'removeCustom']
         },
         scene: {
           type: 'string',
@@ -52,11 +68,69 @@ export async function registerClientBuiltinTools(): Promise<void> {
     }
   }, scene);
 
+  // Workflow Phase Management - client-side handler. The realtime tool
+  // dispatch in `useHandleServerEvent` wires up `setWorkflowPhase`,
+  // `getCurrentWorkflowPhase`, etc. on the tool context.
+  // Only registered when the experience declares workflow phases — see
+  // `registerBuiltinTools` for the rationale.
+  if (hasWorkflowPhases) {
+    await registry.register({
+      type: 'function',
+      name: 'workflowPhase',
+      description: WORKFLOW_PHASE_DESCRIPTION,
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            description: 'The action to perform',
+            enum: [...WORKFLOW_PHASE_ACTIONS]
+          },
+          phase: {
+            type: 'string',
+            description: 'Target phase id (required for set, setNext, suggestReturn).'
+          },
+          reason: {
+            type: 'string',
+            description: 'Reason shown to the user (required for suggestReturn).'
+          },
+          id: {
+            type: 'string',
+            description: 'Objective id (required for markObjective). Must match one of the objectives declared on the current phase.'
+          },
+          note: {
+            type: 'string',
+            description: 'Optional one-line note recorded with markObjective in the event log (not shown to the user).'
+          }
+        },
+        required: ['action']
+      }
+    }, workflowPhase);
+
+    // Finish-Experience tool — client-side handler. The realtime tool dispatch
+    // in `useHandleServerEvent` wires up `finishExperience` on the tool context.
+    await registry.register({
+      type: 'function',
+      name: 'finishExperience',
+      description: FINISH_EXPERIENCE_DESCRIPTION,
+      parameters: {
+        type: 'object',
+        properties: {
+          reason: {
+            type: 'string',
+            description: 'Optional rationale for finishing the experience.'
+          }
+        },
+        required: []
+      }
+    }, finishExperience);
+  }
+
   // Information Storage - client stub that forwards to server
   const informationDefinition = {
     type: 'function' as const,
     name: 'information',
-    description: 'Manage stored information. Use discover to list available keys, get to retrieve, save to store, delete to remove. Useful for maintaining continuity between agents and preparing summaries.',
+    description: 'Share facts between agents via a simple key/value store. The tool name is `information`; you must also pass an `action` argument set to one of: `discover` (list existing keys), `get` (fetch a value, requires `key`), `save` (store a value, requires `key` and `value`), `delete` (remove, requires `key`).',
     parameters: {
       type: 'object' as const,
       properties: {
@@ -112,14 +186,14 @@ export async function registerClientBuiltinTools(): Promise<void> {
   await registry.register({
     type: 'function',
     name: 'artifact',
-    description: 'OFTEN use artifacts to discuss ideas rather than just talking about them. Can be used as a shared \'brainstorming\' utility. Like a whiteboard.',
+    description: 'Create and retrieve artifacts — persistent files (markdown, images, code) saved with the experience. Actions: list (see all), get (fetch one by id), create (new artifact), edit (update content by id), delete (remove by id). Storage only — this tool has NO display action. To display content in the document panel, use the slide tool: slide({ action: \'showArtifact\', artifactId: \'<id>\' }).',
     parameters: {
       type: 'object',
       properties: {
         action: {
           type: 'string',
-          description: 'The action to perform: \'list\', \'create\', \'show\', \'delete\'',
-          enum: ['list', 'create', 'show', 'delete']
+          description: 'The action to perform',
+          enum: ['list', 'get', 'create', 'edit', 'delete']
         },
         name: {
           type: 'string',
@@ -127,11 +201,11 @@ export async function registerClientBuiltinTools(): Promise<void> {
         },
         id: {
           type: 'string',
-          description: 'Required for \'show\' and \'delete\'. ID of the artifact'
+          description: 'Required for \'get\', \'edit\', \'delete\'. Artifact id.'
         },
         content: {
           type: 'string',
-          description: 'Required for \'create\'. Content of the artifact'
+          description: 'Required for \'create\' and \'edit\'. Content of the artifact.'
         },
         type: {
           type: 'string',
@@ -175,10 +249,12 @@ export async function registerClientBuiltinTools(): Promise<void> {
   }, checklist);
 
   // Agent Management - client stub that forwards to server
+  const agentBaseDescription = 'Manage agents. Use \'discover\' to list all agents and what you can do with them. Use \'transfer\' to permanently hand off frontend control to another agent. Use \'delegate\' to send a task to a backend agent that will return results to you.';
+  const agentPhaseSuffix = ' Workflow phases are active: \'transfer\' is restricted to agents in the current phase. To switch to an agent that anchors a later phase, call workflowPhase.nextPhase (or workflowPhase.set) — that drives the agent change as a side effect.';
   const agentDefinition = {
     type: 'function' as const,
     name: 'agent',
-    description: 'Manage agents. Use \'discover\' to list all agents and what you can do with them. Use \'transfer\' to permanently hand off frontend control to another agent. Use \'delegate\' to send a task to a backend agent that will return results to you.',
+    description: hasWorkflowPhases ? agentBaseDescription + agentPhaseSuffix : agentBaseDescription,
     parameters: {
       type: 'object' as const,
       properties: {
@@ -252,11 +328,12 @@ export async function registerClientBuiltinTools(): Promise<void> {
     }
   }, toast);
 
-  // UI Observation - client stub that forwards to server
+  // UI Observation - client stub that forwards to server. See
+  // builtin/register.ts for the full description; keep these strings in sync.
   const observeDefinition = {
     type: 'function' as const,
     name: 'observe',
-    description: 'Observe the current UI state. Returns information about all UI elements (visible and hidden), their positions, sizes, and spatial relationships. Use this to understand what\'s on screen and where things are located.',
+    description: 'Report the current user-facing state. Returns the derived layout arrangement, scene/document visibility, activeDocument, viewedDocument, library, notes, current scene, current document tab, and current conversation agent. Call this when you need to know what the user sees before deciding what to show or hide.',
     parameters: {
       type: 'object' as const,
       properties: {},
@@ -267,71 +344,34 @@ export async function registerClientBuiltinTools(): Promise<void> {
   const observeStub = createToolStub('observe', observeDefinition);
   await registry.register(observeDefinition, observeStub.handler);
 
-  // UI Presentation - client stub that forwards to server
-  const presentDefinition = {
-    type: 'function' as const,
-    name: 'present',
-    description: 'Manage UI elements (slides, components, notes). Control visibility, position, size, and maximize state. Use show/hide to toggle visibility (element remains in memory), destroy to permanently remove.',
-    parameters: {
-      type: 'object' as const,
-      properties: {
-        action: {
-          type: 'string',
-          description: 'The action to perform',
-          enum: ['show', 'hide', 'hideAll', 'move', 'resize', 'maximize', 'restore', 'destroy']
-        },
-        id: {
-          type: 'string',
-          description: 'UI element ID (required for show, hide, move, resize, maximize, restore, destroy)'
-        },
-        x: {
-          type: 'number',
-          description: 'X position in pixels (required for move)'
-        },
-        y: {
-          type: 'number',
-          description: 'Y position in pixels (required for move)'
-        },
-        w: {
-          type: 'number',
-          description: 'Width in pixels (required for resize)'
-        },
-        h: {
-          type: 'number',
-          description: 'Height in pixels (required for resize)'
-        }
-      },
-      required: ['action'] as string[]
-    },
-    handler: async () => ({ status: 'error' as const, data: { error: 'Not implemented' } })
-  };
-  const presentStub = createToolStub('present', presentDefinition);
-  await registry.register(presentDefinition, presentStub.handler);
-
   // Slide Creation - client stub that forwards to server
   const slideDefinition = {
     type: 'function' as const,
     name: 'slide',
-    description: 'Create slides to display content. Use \'show\' to create a slide with markdown content, or \'showArtifact\' to create a slide from an artifact. Returns slideId for use with \'present\' tool for window management.',
+    description: "Show or manage the document panel. REQUIRED: every call MUST include `action` (one of: show, showArtifact, list, close, hide, reveal). NEVER call slide without an action — calls without `action` always fail. Common shapes: `slide({ action: 'showArtifact', artifactId: '<id>' })` to display an existing artifact on the slide surface; `slide({ action: 'show', title: '...', content: '...' })` to display ad-hoc markdown content. Behavior by action — show: put markdown content in the active slot and reveal the panel; any previously active document moves into the library. showArtifact: same, rendered from an existing artifact. reveal/hide toggle the panel without changing the active document. list: returns every document currently in the active slot or library. close: remove a document from the library entirely (use its id). You do NOT need to close a document before showing a new one, before transferring to another agent, or to tidy up between topics — the library keeps past documents available; only close a document if it should not be reachable any more.",
     parameters: {
       type: 'object' as const,
       properties: {
         action: {
           type: 'string',
-          description: 'The action to perform',
-          enum: ['show', 'showArtifact']
+          description: 'REQUIRED. The action to perform. Must be one of the enum values; never omit.',
+          enum: ['show', 'showArtifact', 'reveal', 'hide', 'list', 'close']
         },
         title: {
           type: 'string',
-          description: 'Slide title'
+          description: 'Document title shown to the user (show).'
         },
         content: {
           type: 'string',
-          description: 'Slide content in markdown (for show action)'
+          description: 'Markdown content of the document (show).'
         },
         artifactId: {
           type: 'string',
-          description: 'Artifact ID to display (for showArtifact action)'
+          description: 'Id of an existing artifact to show (showArtifact).'
+        },
+        id: {
+          type: 'string',
+          description: 'Document id to remove from the library (close). Get ids from slide.list or observe.'
         }
       },
       required: ['action'] as string[]
@@ -341,48 +381,30 @@ export async function registerClientBuiltinTools(): Promise<void> {
   const slideStub = createToolStub('slide', slideDefinition);
   await registry.register(slideDefinition, slideStub.handler);
 
-  // Note tool - client stub that forwards to server
-  // Notes are registered with UIElementManager for observe/present integration
-  // UI manipulation (move, resize, show, hide) is handled by the 'present' tool
+  // Note tool - client stub that forwards to server.
   const noteDefinition = {
     type: 'function' as const,
     name: 'note',
-    description: 'Manage sticky notes. Use \'display\' to create, \'list\' to see all, \'get\' for details, \'delete\' to remove. For moving/resizing/showing/hiding notes, use the \'present\' tool.',
+    description: 'Manage sticky notes that appear in the document panel\'s Notes tab. add creates a note (display/create are accepted aliases). list returns all notes. get fetches one by id. changeColor recolors. delete removes. Notes auto-position in a grid — you don\'t specify coordinates. Use a note when the user mentions a discrete idea worth keeping visible during the conversation (a goal, a misconception, an example, a constraint, a name) — one idea per note. Prefer notes over slides for granular thinking that builds up over a back-and-forth; reserve slides for consolidated content the user will want to re-read.',
     parameters: {
       type: 'object' as const,
       properties: {
         action: {
           type: 'string',
           description: 'The action to perform',
-          enum: ['display', 'changeColor', 'toggleEffect', 'get', 'list', 'delete']
+          enum: ['add', 'create', 'display', 'changeColor', 'get', 'list', 'delete']
         },
         noteId: {
           type: 'string',
-          description: 'Note ID (required for changeColor, toggleEffect, get, delete)'
+          description: 'Note id (required for changeColor, get, delete).'
         },
         content: {
           type: 'string',
-          description: 'Note content in markdown (required for display)'
-        },
-        x: {
-          type: 'number',
-          description: 'X position (optional for display, defaults to random)'
-        },
-        y: {
-          type: 'number',
-          description: 'Y position (optional for display, defaults to random)'
-        },
-        w: {
-          type: 'number',
-          description: 'Width in pixels (optional for display, defaults to 200)'
-        },
-        h: {
-          type: 'number',
-          description: 'Height in pixels (optional for display, defaults to 150)'
+          description: 'Note content in markdown (required for add).'
         },
         color: {
           type: 'string',
-          description: 'Note color: yellow, pink, green, blue, purple, orange'
+          description: 'Note color. One of: yellow, pink, green, blue, purple, orange.'
         }
       },
       required: ['action'] as string[]
@@ -393,12 +415,11 @@ export async function registerClientBuiltinTools(): Promise<void> {
   await registry.register(noteDefinition, noteStub.handler);
 
   // Custom Component tool - client stub that forwards to server
-  // Components are registered with UIElementManager for observe/present integration
-  // Window management (move, resize, show, hide, destroy) is handled by the 'present' tool
+  // Components render in the document panel as active document content.
   const customComponentDefinition = {
     type: 'function' as const,
     name: 'customComponent',
-    description: 'Manage custom React components. Use \'list\' to see available components, \'create\' to instantiate, \'updateState\'/\'getState\' to manage state, \'clearCache\' to force reload. For window management (show/hide/move/resize/destroy), use the \'present\' tool. For seeing active components, use \'observe\'.',
+    description: 'Instantiate and manage custom React components. list shows which components the experience has registered. create instantiates one — the component becomes the active document in the document panel (the previous active document moves to the library, same as slide.show). updateState / getState manage component state. clearCache forces the component code to reload. To remove a component from view, use slide.close with its id. Use observe to see what\'s currently active.\n\nTHEMING: Components must be dark-mode aware. Components are always rendered on a bg-background surface (light: #ffffff, dark: #0f1729 deep navy) — all color choices must be readable against this background in both modes, following WCAG AA contrast rules (4.5:1 for text, 3:1 for UI components). (1) Content-heavy UI must use shadcn semantic tokens — bg-card, bg-background, bg-muted, bg-secondary, bg-accent, bg-primary, bg-destructive, bg-success, text-foreground, text-muted-foreground, border-border, ring-ring. These automatically adapt via CSS variables and are pre-tested for contrast. (2) Decorative/visual elements may use Tailwind palette classes only if: every utility prefix also has a dark: variant in the same file, the light value is readable on #ffffff, and the dark value is readable on #0f1729 (typically use -100/-200 bg + -900 text for light; -900 bg + -100 text for dark). (3) Inline SVG must use stroke="currentColor" or fill="currentColor" — never hardcoded color values. (4) Never build dark: class names at runtime (e.g. `dark:${variable}`) — Tailwind\'s scanner only processes literal class strings.',
     parameters: {
       type: 'object' as const,
       properties: {

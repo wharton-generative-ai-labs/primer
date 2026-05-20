@@ -27,12 +27,16 @@ class DelegationManager {
   private listeners: Set<() => void> = new Set();
 
   /**
-   * Register a new delegation
+   * Register a new delegation. `agentName` is the human-readable display
+   * name resolved from the experience config; passing it here means the
+   * status line never has to fall back to the raw `agentType` slug while
+   * waiting for the first server-side status push.
    */
-  startDelegation(id: string, agentType: string): void {
+  startDelegation(id: string, agentType: string, agentName?: string): void {
     const delegation: ActiveDelegation = {
       id,
       agentType,
+      agentName,
       status: 'Running',
       statusHistory: [{ text: 'Running' }],
       startTime: Date.now()

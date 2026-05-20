@@ -123,8 +123,7 @@ export async function registerMermaidTools(): Promise<void> {
  * 
  * The note tool has been migrated to a backend-first implementation.
  * This function ensures the note stub is registered if not already present.
- * Notes are registered with UIElementManager for observe/present support.
- * UI manipulation (move, resize, show, hide) is handled by the 'present' tool.
+ * Notes are rendered inside the document panel's Notes tab.
  */
 export async function registerNotesTools(): Promise<void> {
   logger.debug({}, 'Checking note tool registration');
@@ -140,21 +139,17 @@ export async function registerNotesTools(): Promise<void> {
     const noteDefinition = {
       type: 'function' as const,
       name: 'note',
-      description: 'Manage sticky notes. Use \'display\' to create, \'list\' to see all, \'get\' for details, \'delete\' to remove. For moving/resizing/showing/hiding notes, use the \'present\' tool.',
+      description: 'Manage sticky notes shown in the document panel\'s Notes tab. Use \'display\' to create, \'list\' to see all, \'get\' for details, \'changeColor\' to recolor, \'delete\' to remove.',
       parameters: {
         type: 'object' as const,
         properties: {
           action: {
             type: 'string',
             description: 'The action to perform',
-            enum: ['display', 'changeColor', 'toggleEffect', 'get', 'list', 'delete']
+            enum: ['display', 'changeColor', 'get', 'list', 'delete']
           },
-          noteId: { type: 'string', description: 'Note ID (required for changeColor, toggleEffect, get, delete)' },
+          noteId: { type: 'string', description: 'Note ID (required for changeColor, get, delete)' },
           content: { type: 'string', description: 'Note content in markdown (required for display)' },
-          x: { type: 'number', description: 'X position (optional for display, defaults to random)' },
-          y: { type: 'number', description: 'Y position (optional for display, defaults to random)' },
-          w: { type: 'number', description: 'Width in pixels (optional for display, defaults to 200)' },
-          h: { type: 'number', description: 'Height in pixels (optional for display, defaults to 150)' },
           color: { type: 'string', description: 'Note color: yellow, pink, green, blue, purple, orange' }
         },
         required: ['action'] as string[]
@@ -178,8 +173,7 @@ export async function registerNotesTools(): Promise<void> {
  * - src/app/lib/tools/builtin/register.ts (server-side)
  * - src/app/lib/tools/builtin/register-client.ts (client-side stub)
  * 
- * Components are registered with UIElementManager for observe/present support.
- * Window management (move, resize, show, hide, destroy) is handled by the 'present' tool.
+ * Components render in the document panel as active document content.
  * 
  * This function is kept for backwards compatibility but does nothing.
  */
@@ -187,4 +181,3 @@ export async function registerCustomComponentTools(): Promise<void> {
   logger.debug({}, 'CustomComponent tool registration skipped (now handled by builtin tools)');
   // No-op: customComponent tool is registered as a backend-first tool in builtin/register.ts
 }
-

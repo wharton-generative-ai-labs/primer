@@ -1,25 +1,29 @@
 /**
  * Scene Management Tool
- * 
+ *
  * Manages background scenes for the experience.
  * Provides actions to discover, set, and manage custom scenes.
  */
 
 import { ToolResponse, ToolContext } from '@/app/lib/tools/types';
 
-/**
- * @tool scene
- * @description Manage background scenes. Use 'discover' to list available scenes, 'set' to display one.
- * @param {object} args - The arguments for the tool
- * @param {string} args.action - The action to perform: 'discover', 'set', 'describe', 'addCustom', 'removeCustom'
- * @param {string} args.scene - The scene name (for set/describe actions)
- * @param {string} args.sceneName - Custom scene name (for addCustom/removeCustom actions)
- * @param {string} args.imageUrl - Image URL (for addCustom action)
- * @param {object} context - The context object
- * @returns {Promise<ToolResponse>} Tool response object
- */
+// Backend agents (subagents dispatched by the design-agent, etc.) inherit
+// scene-tool guidance from cross-agent prompts but have no UI surface to
+// render to — their `ToolContext` lacks scene callbacks. Returning `error`
+// in that case used to look like a real failure to the backend agent's
+// retry loop and would abort the whole dispatch after 3 consecutive
+// "failures" of the same tool. Treat absent-callback scenarios as a no-op
+// success instead so the agent sees "scene was ignored, move on".
+const skippedOnBackend = (action: string): ToolResponse => ({
+    status: 'success',
+    data: {
+        skipped: true,
+        reason: `scene tool is a frontend-only operation; '${action}' ignored on backend`,
+    },
+});
+
 export async function scene(args: {
-    action: 'discover' | 'set' | 'describe' | 'addCustom' | 'removeCustom';
+    action: 'discover' | 'set' | 'reveal' | 'hide' | 'describe' | 'addCustom' | 'removeCustom';
     scene?: string;
     sceneName?: string;
     imageUrl?: string;
@@ -27,10 +31,7 @@ export async function scene(args: {
     switch (args.action) {
         case 'discover': {
             if (!context.getAvailableScenes) {
-                return {
-                    status: 'error',
-                    data: { error: 'getAvailableScenes not available in context' }
-                };
+                return skippedOnBackend(args.action);
             }
             return {
                 status: 'success',
@@ -40,10 +41,7 @@ export async function scene(args: {
 
         case 'set': {
             if (!context.setScene) {
-                return {
-                    status: 'error',
-                    data: { error: 'setScene not available in context' }
-                };
+                return skippedOnBackend(args.action);
             }
             if (!args.scene) {
                 return {
@@ -57,21 +55,37 @@ export async function scene(args: {
             };
         }
 
-        case 'describe': {
-            // This action is handled by getSceneDescription in builtin-server.ts
-            // Return a deferred status to indicate it needs server-side handling
+        case 'reveal': {
+            if (!context.showScene) {
+                return skippedOnBackend(args.action);
+            }
             return {
-                status: 'error',
-                data: { error: 'describe action requires server-side handling' }
+                status: 'success',
+                data: context.showScene()
             };
+        }
+
+        case 'hide': {
+            if (!context.hideScene) {
+                return skippedOnBackend(args.action);
+            }
+            return {
+                status: 'success',
+                data: context.hideScene()
+            };
+        }
+
+        case 'describe': {
+            // This action is handled by getSceneDescription in builtin-server.ts.
+            // When this branch is reached, it means the backend dispatcher
+            // didn't intercept describe — treat as skipped rather than error
+            // so the backend agent doesn't abort.
+            return skippedOnBackend(args.action);
         }
 
         case 'addCustom': {
             if (!context.addCustomScene) {
-                return {
-                    status: 'error',
-                    data: { error: 'addCustomScene not available in context' }
-                };
+                return skippedOnBackend(args.action);
             }
             if (!args.sceneName || !args.imageUrl) {
                 return {
@@ -87,10 +101,7 @@ export async function scene(args: {
 
         case 'removeCustom': {
             if (!context.removeCustomScene) {
-                return {
-                    status: 'error',
-                    data: { error: 'removeCustomScene not available in context' }
-                };
+                return skippedOnBackend(args.action);
             }
             if (!args.sceneName) {
                 return {
@@ -107,8 +118,7 @@ export async function scene(args: {
         default:
             return {
                 status: 'error',
-                data: { error: `Invalid action: ${args.action}. Valid actions are: discover, set, describe, addCustom, removeCustom` }
+                data: { error: `Invalid action: ${args.action}. Valid actions are: discover, set, reveal, hide, describe, addCustom, removeCustom` }
             };
     }
 }
-

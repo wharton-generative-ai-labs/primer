@@ -19,6 +19,7 @@ import {
   ToolExecutionManager,
   AIRequestHandler
 } from './managers';
+import { fireObjectiveSignal } from '@/app/lib/workflow-phases/objectiveSignals';
 
 const logger = createModuleLogger('backend-agent');
 
@@ -105,8 +106,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Initialize tools
-    const tools = await ToolRegistrationManager.initializeTools(experience.agentConfig);
+    // Initialize tools — pass experience-level custom toolSets so agents can
+    // reference experience-specific bundles (e.g. "design-agent-tools").
+    const tools = await ToolRegistrationManager.initializeTools(
+      experience.agentConfig,
+      experience.config.toolSets,
+    );
 
     // Get provider configuration
     const providerConfig = AIRequestHandler.getProviderConfig(experience);
@@ -123,7 +128,8 @@ export async function POST(request: NextRequest) {
       validatedData.experienceId,
       validatedData.sessionId,
       validatedData.delegationId,
-      userInfo
+      userInfo,
+      experience.agentKey,
     );
     
     // Add AI configuration to tool context so tools can access it
@@ -348,6 +354,19 @@ export async function POST(request: NextRequest) {
       iterationCount,
       maxToolCalls
     }, 'Backend agent completed');
+
+    // Best-effort delegate-success hook. Fire AFTER the AI loop has completed
+    // successfully and BEFORE returning the response so we don't race the
+    // client's next render. Failures inside the hook are swallowed
+    // (see fireObjectiveSignal). Skipped on the error branch below.
+    void fireObjectiveSignal({
+      experienceId: validatedData.experienceId,
+      sessionId: validatedData.sessionId,
+      signal: {
+        kind: 'delegateSuccess',
+        resolvedAgentKey: validatedData.agentType,
+      },
+    });
 
     return NextResponse.json({
       success: true,

@@ -248,7 +248,7 @@ describe('ExperienceConfigLoader', () => {
           provider: 'openai',
           model: 'gpt-4',
         });
-        expect(result.temperature).toBe(0.7);
+        expect(result.temperature).toBeUndefined();
       });
 
       it('should resolve custom AI configuration', () => {
@@ -303,15 +303,18 @@ describe('ExperienceConfigLoader', () => {
         expect(result.temperature).toBe(0.5);
       });
 
-      it('should use default temperature (0.7) when not specified', () => {
+      it('should leave temperature undefined when not specified, so providers use their model default', () => {
+        // Some models (gpt-5, o-series) reject any explicit temperature, so
+        // hardcoding a fallback would 400 every delegation. Authors who want
+        // a specific value declare it on the agent.
         const agentConfig: AgentConfig = {
           name: 'Test Agent',
           aiConfiguration: 'default',
         };
-        
+
         const result = ExperienceConfigLoader.getAIConfiguration(mockConfig, agentConfig);
-        
-        expect(result.temperature).toBe(0.7);
+
+        expect(result.temperature).toBeUndefined();
       });
 
       it('should handle temperature of 0', () => {
@@ -368,7 +371,7 @@ describe('ExperienceConfigLoader', () => {
         const result = ExperienceConfigLoader.getAIConfiguration(configNoAI, agentConfig);
         
         expect(result.aiConfig).toBeUndefined();
-        expect(result.temperature).toBe(0.7);
+        expect(result.temperature).toBeUndefined();
       });
 
       it('should handle empty aiConfigurations object', () => {
@@ -388,7 +391,7 @@ describe('ExperienceConfigLoader', () => {
         const result = ExperienceConfigLoader.getAIConfiguration(configEmptyAI, agentConfig);
         
         expect(result.aiConfig).toBeUndefined();
-        expect(result.temperature).toBe(0.7);
+        expect(result.temperature).toBeUndefined();
       });
     });
   });
@@ -684,6 +687,69 @@ describe('ExperienceConfigLoader', () => {
           ExperienceConfigLoader.loadAgentInstructions('test-exp', mockConfig, 'agent1')
         ).rejects.toThrow('Failed to load agent instructions');
       });
+    });
+  });
+
+  describe('loadExperience — agent-not-found error message', () => {
+    let mockReadFile: jest.Mock;
+    let mockGetExperienceFolder: jest.Mock;
+    let mockPathJoin: jest.Mock;
+
+    beforeEach(async () => {
+      jest.clearAllMocks();
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const fileUtils = await import('@/app/lib/file-utils');
+      mockReadFile = fs.readFile as jest.Mock;
+      mockGetExperienceFolder = fileUtils.getExperienceFolder as jest.Mock;
+      mockPathJoin = path.join as jest.Mock;
+      mockGetExperienceFolder.mockResolvedValue('/mock/path');
+      mockPathJoin.mockImplementation((...args) => args.join('/'));
+    });
+
+    function mockConfig(agents: Record<string, Partial<AgentConfig>>) {
+      mockReadFile.mockResolvedValue(JSON.stringify({
+        id: 'test',
+        name: 'Test',
+        agents,
+        aiConfigurations: {},
+        resources: {},
+      }));
+    }
+
+    it('flags a tool name (artifact) called as agentType with a tool-vs-agent hint', async () => {
+      mockConfig({
+        'design-agent': { name: 'Design Agent', aiConfiguration: 'default' },
+      });
+      await expect(
+        ExperienceConfigLoader.loadExperience('test', 'artifact'),
+      ).rejects.toThrow(/built-in tool, not a sub-agent.*artifact\(\.\.\.\) directly/);
+    });
+
+    it('lists available agents in the error when the name is unknown', async () => {
+      mockConfig({
+        'design-agent': { name: 'Design Agent', aiConfiguration: 'default' },
+        'casting-director': { name: 'Casting Director', aiConfiguration: 'default' },
+      });
+      await expect(
+        ExperienceConfigLoader.loadExperience('test', 'mystery-agent'),
+      ).rejects.toThrow(/Available agents: design-agent, casting-director/);
+    });
+
+    it('does not include a tool hint when the name is just an unknown agent', async () => {
+      mockConfig({
+        'design-agent': { name: 'Design Agent', aiConfiguration: 'default' },
+      });
+      await expect(
+        ExperienceConfigLoader.loadExperience('test', 'mystery'),
+      ).rejects.toThrow(/^No agent found matching "mystery"\. Available agents: design-agent\.$/);
+    });
+
+    it('says no agents declared when the agents block is empty', async () => {
+      mockConfig({});
+      await expect(
+        ExperienceConfigLoader.loadExperience('test', 'anything'),
+      ).rejects.toThrow(/declares no agents/);
     });
   });
 });

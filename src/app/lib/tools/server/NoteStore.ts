@@ -17,9 +17,8 @@ const logger = createModuleLogger('NoteStore');
 /**
  * Note interface - extends PrimerUIElement with note-specific properties
  * 
- * Notes are registered with UIElementManager so they can be:
- * - Observed via the 'observe' tool
- * - Manipulated via the 'present' tool (move, resize, show, hide)
+ * Notes are rendered in the document panel's Notes tab. Position and size are
+ * retained for persistence compatibility but do not drive the panel layout.
  * 
  * Inherits from PrimerUIElement: id, kind, title, x, y, w, h, visible, zIndex
  * Note-specific properties: content, color, effect

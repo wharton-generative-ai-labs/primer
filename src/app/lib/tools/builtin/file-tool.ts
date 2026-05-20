@@ -12,6 +12,36 @@ import { getExistingSessionId } from '@/app/lib/session-utils';
 // instead of managing its own session storage
 
 /**
+ * Accept whatever the LLM passes as `fileInfoUrl` and turn it into a real
+ * `/api/file-info/<encoded-filename>` URL. The model is supposed to echo the
+ * URL returned by `listUploaded` verbatim, but in practice it frequently
+ * shortens to a bare filename (e.g. "History Class Plan.docx"). Without
+ * normalization that string becomes a relative fetch against the current page
+ * URL, typically resolves to a Next page that returns HTML, and then
+ * `response.json()` throws "Unexpected token '<'..." — masking the real cause.
+ *
+ * Returns `null` for inputs that can't reasonably be coerced to a filename.
+ */
+function normalizeFileInfoUrl(input: string): string | null {
+    const trimmed = input.trim();
+    if (!trimmed) {
+        return null;
+    }
+    const lastSlash = trimmed.lastIndexOf('/');
+    const rawFileName = lastSlash >= 0 ? trimmed.slice(lastSlash + 1) : trimmed;
+    let fileName = rawFileName;
+    try {
+        fileName = decodeURIComponent(rawFileName);
+    } catch {
+        // Already-decoded names with stray '%' aren't decodable; use as-is.
+    }
+    if (!fileName) {
+        return null;
+    }
+    return `/api/file-info/${encodeURIComponent(fileName)}`;
+}
+
+/**
  * @tool file
  * @description Manage user file uploads. Use 'listUploaded' to see uploaded files, 'getInfo' to read file content, 'requestUpload' to ask for a file.
  * @param {object} args - The arguments for the tool
@@ -99,9 +129,16 @@ export async function file(args: {
                 };
             }
 
+            const normalizedUrl = normalizeFileInfoUrl(args.fileInfoUrl);
+            if (!normalizedUrl) {
+                return {
+                    status: 'error',
+                    data: { error: `Invalid fileInfoUrl: ${args.fileInfoUrl}` }
+                };
+            }
+
             try {
-                // The fileInfoUrl is in format /api/file-info/{fileName}
-                const response = await fetch(args.fileInfoUrl, {
+                const response = await fetch(normalizedUrl, {
                     method: 'GET',
                     headers: {
                         'x-experience-id': context.experienceId,
@@ -109,18 +146,39 @@ export async function file(args: {
                     },
                 });
 
+                // Read the body once as text, then attempt JSON. If the
+                // request slipped past the API and hit a page route, the body
+                // is HTML and `.json()` would throw the unhelpful
+                // "Unexpected token '<'" error.
+                const bodyText = await response.text();
+                let parsed: unknown = null;
+                try {
+                    parsed = bodyText ? JSON.parse(bodyText) : null;
+                } catch {
+                    parsed = null;
+                }
+
                 if (!response.ok) {
-                    const errorData = await response.json().catch(() => ({}));
+                    const errorMessage =
+                        (parsed && typeof parsed === 'object' && 'error' in parsed && typeof (parsed as { error: unknown }).error === 'string')
+                            ? (parsed as { error: string }).error
+                            : `Failed to get file info: ${response.status}`;
                     return {
                         status: 'error',
-                        data: { error: errorData.error || `Failed to get file info: ${response.status}` }
+                        data: { error: errorMessage }
                     };
                 }
 
-                const fileInfo = await response.json();
+                if (parsed === null) {
+                    return {
+                        status: 'error',
+                        data: { error: `Failed to get file info: unexpected non-JSON response (status ${response.status})` }
+                    };
+                }
+
                 return {
                     status: 'success',
-                    data: fileInfo
+                    data: parsed
                 };
             } catch (error) {
                 return {

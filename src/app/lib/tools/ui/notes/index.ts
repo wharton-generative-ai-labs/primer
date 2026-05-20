@@ -1,15 +1,10 @@
 /**
  * Notes plugin public API
- * Exports managers, components, and types for external use
+ * Exports the note manager and types for external use.
  * 
- * Notes are now integrated with UIElementManager for observe/present support:
- * - Notes register with UIElementManager when displayed
- * - Position/size/visibility are synced between NotesManager and UIElementManager
- * - Notes are visible via the 'observe' tool
- * - Notes can be manipulated via the 'present' tool
+ * Notes are rendered inside the document panel's Notes tab. Visibility is
+ * driven by note state, not by floating UI element commands.
  */
 
-export { getNotesManager, subscribeToStateUpdates, syncNoteFromUIElement } from './NotesManager';
-export { NotesComponent } from './NotesComponent';
+export { getNotesManager, subscribeToStateUpdates } from './NotesManager';
 export type { Note, NotesManagerContext } from './NotesManager';
-

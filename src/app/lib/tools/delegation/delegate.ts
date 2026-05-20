@@ -15,6 +15,29 @@ function generateDelegationId(): string {
 }
 
 /**
+ * Resolve the LLM-supplied `agentType` (which may be a slug like
+ * "design-agent" OR a friendly name like "Design Agent") to the
+ * `AgentConfig.name` from `context.agents`. Mirrors
+ * `ExperienceConfigLoader.findAgentConfig` on the server: match by
+ * `name` first, then by key. Returns `undefined` when no match — callers
+ * should fall back to the raw `agentType` string in that case.
+ */
+function resolveAgentName(
+  agentType: string,
+  context: ToolContext,
+): string | undefined {
+  if (!context.agents) return undefined;
+  const needle = agentType.toLowerCase();
+  const entries = Object.entries(
+    context.agents as Record<string, { name?: string }>,
+  );
+  const byName = entries.find(([, cfg]) => cfg.name?.toLowerCase() === needle);
+  if (byName) return byName[1].name;
+  const byKey = entries.find(([key]) => key.toLowerCase() === needle);
+  return byKey?.[1]?.name;
+}
+
+/**
  * @tool
  * @description Delegate a task to a backend agent to perform complex processing
  * @param {string} args.agentType - The friendly name of the agent to delegate to (e.g. "Design Agent", "Casting Director")
@@ -30,15 +53,34 @@ export async function delegate(args: {
 }, context: ToolContext): Promise<ToolResponse> {
   // Generate a unique delegation ID
   const delegationId = generateDelegationId();
-  
+
+  // Resolve the friendly display name from the agents map up-front so the
+  // status line never has to render a raw slug like "design-agent" while
+  // waiting for the backend's first status push to arrive.
+  const resolvedAgentName = resolveAgentName(args.agentType, context);
+
   // Register the delegation in the manager (show the overlay)
   const delegationManager = getDelegationManager();
-  delegationManager.startDelegation(delegationId, args.agentType);
+  delegationManager.startDelegation(delegationId, args.agentType, resolvedAgentName);
   
   try {
     // Validate that we have an experience ID
     if (!context.experienceId) {
       throw new Error('Experience ID is required for delegation');
+    }
+
+    // `delegate()` is a frontend-only orchestration path: it depends on
+    // browser globals (`sessionStorage` for the session id; `getGlobalSocket`
+    // for the socket transport). When called from a backend agent (Node, no
+    // browser globals), every check below would fail with a misleading
+    // "no active session" message — callers spend time looking at session
+    // setup when the real cause is that backend agents must not spawn
+    // sub-delegations at all. Detect that case up-front and surface the
+    // actual constraint.
+    if (typeof sessionStorage === 'undefined') {
+      throw new Error(
+        'agent.delegate is only callable from the frontend orchestrator. Backend agents cannot spawn sub-delegations; return a result and let the orchestrator drive the next step.',
+      );
     }
 
     const sessionId = getExistingSessionId();

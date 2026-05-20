@@ -13,6 +13,41 @@ import type { ExperienceConfig, AgentConfig, LoadedExperience } from './types';
 
 const logger = createModuleLogger('backend-agent-experience-loader');
 
+/**
+ * Common built-in tool names that look like they could be sub-agents but
+ * aren't. When `agent.delegate({ agentType: <name> })` resolves to none of the
+ * configured agents AND `<name>` is in this set, the error message points the
+ * caller at calling the tool directly. This list is for error-pointing only;
+ * drift is OK.
+ */
+const KNOWN_TOOL_NAMES_NOT_AGENTS: ReadonlySet<string> = new Set([
+  'artifact', 'checklist', 'slide', 'scene', 'note', 'observe', 'information',
+  'file', 'toast', 'customcomponent',
+  'finishexperience', 'workflowphase',
+  'createexperience', 'copytemplate', 'createfile', 'createdirectory',
+  'deletefile', 'deletedirectory', 'movefile', 'movedirectory',
+  'listresources', 'getresourcecontent', 'deployartifact',
+  'modifyexperience', 'modifyagent', 'getexperience', 'listtemplateexperiences',
+  'generateimages', 'generatecomponentstyles', 'validatecomponent',
+  'updatedelegationstatus', 'sessionevent', 'showprogress',
+]);
+
+function buildAgentNotFoundError(agentType: string, agentKeys: string[]): Error {
+  const needle = agentType.toLowerCase();
+  const lines = [`No agent found matching "${agentType}".`];
+  if (KNOWN_TOOL_NAMES_NOT_AGENTS.has(needle)) {
+    lines.push(
+      `"${agentType}" is a built-in tool, not a sub-agent — call ${agentType}(...) directly instead of agent.delegate({ agentType: "${agentType}" }).`,
+    );
+  }
+  if (agentKeys.length > 0) {
+    lines.push(`Available agents: ${agentKeys.join(', ')}.`);
+  } else {
+    lines.push('This experience declares no agents.');
+  }
+  return new Error(lines.join(' '));
+}
+
 export class ExperienceConfigLoader {
   /**
    * Load experience configuration from file system
@@ -106,7 +141,11 @@ export class ExperienceConfigLoader {
   static getAIConfiguration(config: ExperienceConfig, agentConfig: AgentConfig) {
     const aiConfigName = agentConfig.aiConfiguration || 'default';
     const aiConfig = config.aiConfigurations?.[aiConfigName];
-    const temperature = agentConfig.temperature ?? 0.7;
+    // Leave temperature undefined when the author hasn't set one — providers
+    // use their own model default. Some models (gpt-5, o-series) reject any
+    // explicit value, so passing a hardcoded fallback here would 400 on
+    // every delegation.
+    const temperature = agentConfig.temperature;
 
     logger.debug({ aiConfigName, temperature, provider: aiConfig?.provider }, 'AI configuration resolved');
 
@@ -126,7 +165,7 @@ export class ExperienceConfigLoader {
     // Find agent
     const agentResult = this.findAgentConfig(config, agentType);
     if (!agentResult) {
-      throw new Error(`No agent found matching "${agentType}"`);
+      throw buildAgentNotFoundError(agentType, Object.keys(config.agents || {}));
     }
 
     const { agentKey, agentConfig } = agentResult;

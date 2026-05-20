@@ -15,6 +15,7 @@ import {
   listResources,
   getResourceContent,
   deployArtifact,
+  deployBuildArtifacts,
   validateComponent,
   generateComponentStyles
 } from './experience';
@@ -33,6 +34,7 @@ export {
   listResources,
   getResourceContent,
   deployArtifact,
+  deployBuildArtifacts,
   validateComponent,
   generateComponentStyles,
   getTemplateAgentInstructions,
@@ -307,8 +309,25 @@ export async function registerExperienceTools(): Promise<void> {
 
   await registry.register({
     type: 'function',
+    name: 'deployBuildArtifacts',
+    description:
+      'Deploy the six canonical build artifacts (mentor_prompt, practice_prompt, feedback_prompt, mentor_scene, practice_scene, feedback_scene) to a freshly-copied experience in one call. The platform discovers each artifact by its slug id from listArtifacts and writes it to the conventional location — agents do not need to pass artifactIds. Use this in the experience-builder pipeline INSTEAD OF six separate deployArtifact calls.',
+    parameters: {
+      type: 'object',
+      properties: {
+        experienceId: {
+          type: 'string',
+          description: 'Optional: target experience slug. Defaults to current experience id from context.'
+        }
+      },
+      required: []
+    }
+  }, deployBuildArtifacts);
+
+  await registry.register({
+    type: 'function',
     name: 'validateComponent',
-    description: 'Validate custom React component JSX code before deployment. Checks for syntax errors, security issues, required exports, and Primer integration patterns. Returns validation result with any errors or warnings. Use this BEFORE deploying component code to catch issues early. Defaults to current experience.',
+    description: 'Validate custom React component JSX code before deployment. Checks for syntax errors, security issues, required exports, and Primer integration patterns. Returns validation result with any errors or warnings. Use this BEFORE deploying component code to catch issues early. Defaults to current experience.\n\nTHEMING: The validator checks three theming rules. (21) Hardcoded Tailwind palette classes (e.g. bg-blue-500, text-red-600) that lack a dark: variant for the same utility prefix produce a warning — use shadcn semantic tokens instead, or add dark: pairs for decorative elements. (22) Inline SVG stroke=/fill= attributes with hardcoded colors produce a warning — use currentColor or a CSS variable. (22b) Runtime-computed dark: classes (e.g. `dark:${x}`) are an error — Tailwind cannot scan them, so they silently break dark mode.',
     parameters: {
       type: 'object',
       properties: {

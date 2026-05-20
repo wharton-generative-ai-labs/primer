@@ -5,6 +5,7 @@
 
 import { ImageGenerationStrategy } from './ImageGenerationStrategy';
 import { NanoBananaStrategy } from './NanoBananaStrategy';
+import { OpenAIImageStrategy } from './OpenAIImageStrategy';
 import { createModuleLogger } from '@/lib/logger';
 
 const logger = createModuleLogger('ImageStrategyFactory');
@@ -12,12 +13,14 @@ const logger = createModuleLogger('ImageStrategyFactory');
 // Export types and strategies
 export * from './ImageGenerationStrategy';
 export { NanoBananaStrategy } from './NanoBananaStrategy';
+export { OpenAIImageStrategy } from './OpenAIImageStrategy';
 
 /**
  * Available strategies
  */
 const strategies: ImageGenerationStrategy[] = [
-  new NanoBananaStrategy(), // Nano Banana is the primary strategy
+  new OpenAIImageStrategy(),
+  new NanoBananaStrategy(),
 ];
 
 /**

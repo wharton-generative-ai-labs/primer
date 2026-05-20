@@ -3,29 +3,18 @@
  * Uses Gemini's conversational multi-turn image generation API for consistent visual style.
  */
 
-import { ImageGenerationStrategy, ImageGenerationOptions, ImageGenerationResult } from './ImageGenerationStrategy';
+import {
+  ImageGenerationStrategy,
+  ImageGenerationOptions,
+  ImageGenerationResult,
+  MultiTurnGenerationOptions,
+  MultiTurnGenerationResult,
+  MultiTurnImageSpec,
+} from './ImageGenerationStrategy';
 import { createModuleLogger } from '@/lib/logger';
 import { env } from '@/config/env';
 
 const logger = createModuleLogger('NanoBananaStrategy');
-
-export interface MultiTurnImageSpec {
-  name: string;
-  description: string;
-}
-
-export interface MultiTurnGenerationOptions {
-  visualStyle: string;
-  aspectRatio: string;
-  imageSpecs: MultiTurnImageSpec[];
-  additionalInstructions?: string;
-}
-
-export interface MultiTurnGenerationResult {
-  images: Array<{ data: string; metadata?: any }>;
-  text: string;
-  error?: string;
-}
 
 export class NanoBananaStrategy implements ImageGenerationStrategy {
   readonly name = 'nano-banana';

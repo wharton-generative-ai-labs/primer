@@ -6,10 +6,41 @@
  */
 
 import { ComponentEvent, ComponentStateChangeEvent } from './ui/components/types';
+import type {
+  WorkflowPhaseConfig,
+  WorkflowPhaseState,
+} from '@/app/lib/workflow-phases';
 
 export interface ToolResponse {
   status: 'success' | 'error';
   data: any;
+}
+
+/** Operation accepted by `ToolContext.setWorkflowPhase`. */
+export type WorkflowPhaseToolOp =
+  | { kind: 'complete' | 'advance' | 'nextPhase' }
+  | { kind: 'set' | 'setNext'; targetPhase: string }
+  | { kind: 'markObjective'; id: string; note?: string };
+
+/** Result returned by `ToolContext.setWorkflowPhase`. */
+export interface WorkflowPhaseToolResult {
+  result: boolean;
+  message?: string;
+  /** The current phase id after the op completes (post-state). */
+  currentPhase?: string;
+  /** The active forward override after the op completes (if any). */
+  nextPhaseOverride?: string;
+}
+
+/** Snapshot of the current workflow phase exposed to the tool layer. */
+export interface CurrentWorkflowPhaseInfo {
+  id: string;
+  title: string;
+  index: number;
+  total: number;
+  isCompleted: boolean;
+  nextPhaseOverride?: string;
+  resolvedNextPhaseId?: string;
 }
 
 export interface ToolContext {
@@ -18,16 +49,43 @@ export interface ToolContext {
   selectedAgentKey?: string;
   agents?: Record<string, any>;
   experienceId?: string;
+  /**
+   * Session id for backend tool execution. Set by `createServerToolContext`;
+   * undefined on browser-built contexts (which fall back to
+   * `sessionStorage`). Tools that need a session id should prefer this field
+   * before reaching for browser-only globals so they keep working when called
+   * from a delegated backend agent.
+   */
+  sessionId?: string;
   setScene?: (scene: string) => void;
+  showScene?: () => { result: boolean; message?: string };
+  hideScene?: () => { result: boolean; message?: string };
+  setDocumentVisible?: (visible: boolean) => void;
   sendClientEvent?: (event: any) => void;
   showFileUpload?: (prompt: string, functionCallId: string) => void;
   addTranscriptBreadcrumb?: (title: string, data: any) => void;
+  addTranscriptHandoff?: (fromName: string | undefined, toName: string | undefined, rationale?: string) => void;
   setQueuedAgentTransfer?: (key: string | null) => void;
   showArtifact?: (id: string) => Promise<void>;
   listArtifacts?: () => Promise<any[]>;
-  getArtifact?: (id: string, includeContent?: boolean) => Promise<any>;
-  createArtifact?: (name: string, content: string, type: string) => Promise<any>;
-  updateArtifact?: (id: string, content: string) => Promise<void>;
+  /** Read an artifact. Pass `rev` to fetch a specific past revision; omit to
+   *  fetch the head. The `includeContent` flag is legacy and currently
+   *  ignored by both implementations (head and revision fetches always
+   *  include content). */
+  getArtifact?: (id: string, includeContent?: boolean, rev?: number) => Promise<any>;
+  createArtifact?: (
+    name: string,
+    content: string,
+    type: string,
+    metadata?: unknown,
+    options?: { agentKey?: string },
+  ) => Promise<any>;
+  updateArtifact?: (
+    id: string,
+    content: string,
+    metadata?: unknown,
+    options?: { agentKey?: string },
+  ) => Promise<void>;
   deleteArtifact?: (id: string) => Promise<void>;
   getSceneUrl?: (scene: string) => string;
   getAvailableScenes?: () => string[];
@@ -75,6 +133,36 @@ export interface ToolContext {
   moveDirectory?: (experienceId: string, sourcePath: string, destinationPath: string) => Promise<void>;
   listResources?: (experienceId: string) => Promise<any[]>;
   getResourceContent?: (experienceId: string, path: string) => Promise<{ content: string; contentType: string; isText: boolean; fileUrl?: string }>;
+
+  // Workflow-phase capabilities. Optional because not every consumer wires
+  // them up (legacy contexts, isolated tests).
+  /**
+   * Apply a phase-state mutation. `complete` and `advance` operate on the
+   * current phase. `set` jumps forward to a named phase (backward refused).
+   * `setNext` records a forward override and does not navigate.
+   */
+  setWorkflowPhase?: (
+    op: WorkflowPhaseToolOp,
+    meta?: { trigger?: 'agent' | 'user' | 'system'; reason?: string },
+  ) => Promise<WorkflowPhaseToolResult>;
+  /** Returns metadata for the active phase or null if no phases are configured. */
+  getCurrentWorkflowPhase?: () => CurrentWorkflowPhaseInfo | null;
+  /** Returns the ordered phase list from the experience config. */
+  getWorkflowPhases?: () => WorkflowPhaseConfig[];
+  /** Optional accessor for the underlying state (visited, completed, override). */
+  getWorkflowPhaseState?: () => WorkflowPhaseState | null;
+  /**
+   * Surfaces a UI prompt asking the user whether to revisit `phaseId`.
+   * Does not transition. The UI consumer owns what to render.
+   */
+  suggestWorkflowPhaseReturn?: (phaseId: string, reason: string) => void;
+  /**
+   * Mark the entire experience complete. Routes to the workflow-phase
+   * manager's `finishExperience` op (sets the `experienceCompleted` flag and
+   * emits `EXPERIENCE_COMPLETED`). Idempotent: a second call after the flag
+   * is already set returns `{ result: true }` but emits no new event.
+   */
+  finishExperience?: (reason?: string) => Promise<{ result: boolean }>;
 }
 
 export interface ToolDefinition {
@@ -99,4 +187,3 @@ export interface PluginMetadata {
   description: string;
   tools: ToolDefinition[];
 }
-

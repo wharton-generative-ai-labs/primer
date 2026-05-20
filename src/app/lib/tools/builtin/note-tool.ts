@@ -1,11 +1,15 @@
 /**
  * Note Tool - Backend-first implementation
- * 
- * Manages sticky notes on screen. Data is stored on the server,
- * persisted to disk in session_data/{sessionId}/notes.json.
- * 
- * Note-specific operations: display, changeColor, toggleEffect, get, list, delete
- * UI manipulation (move, resize, show, hide): Use the 'present' tool instead
+ *
+ * Manages sticky notes that render in the Document Panel's Notes tab. Data is
+ * stored on the server and persisted to disk in session_data/{sessionId}/notes.json.
+ *
+ * Actions: display, changeColor, get, list, delete.
+ *
+ * Per the panel-layout-and-tool-redesign spec, notes no longer have x/y/w/h or
+ * a floating "effect" — the grid layout handles positioning and there's no
+ * floating surface for effects. The schema has been stripped accordingly; the
+ * impl still accepts/ignores positioning params for any old persisted data.
  */
 
 import { ToolResponse, ToolContext } from '@/app/lib/tools/types';
@@ -19,16 +23,12 @@ const validColors = ['yellow', 'pink', 'green', 'blue', 'purple', 'orange'];
 
 /**
  * @tool note
- * @description Manage sticky notes. Use 'display' to create, 'list' to see all, 'get' for details, 'delete' to remove. For moving/resizing/showing/hiding notes, use the 'present' tool.
+ * @description Manage sticky notes in the document panel's Notes tab. Use 'add' to create a note, 'list' to see all, 'get' for details, 'changeColor' to recolor, and 'delete' to remove. ('display' and 'create' are accepted aliases for 'add' so the realtime model has more than one natural verb to reach for.)
  */
 export async function note(args: {
-  action: 'display' | 'changeColor' | 'toggleEffect' | 'get' | 'list' | 'delete';
+  action: 'add' | 'create' | 'display' | 'changeColor' | 'get' | 'list' | 'delete';
   noteId?: string;
   content?: string;
-  x?: number | null;
-  y?: number | null;
-  w?: number | null;
-  h?: number | null;
   color?: string | null;
 }, context: ToolContext): Promise<ToolResponse> {
   logger.debug({ action: args.action, noteId: args.noteId }, 'note tool called');
@@ -50,9 +50,17 @@ export async function note(args: {
       data: { error: 'Socket communication not available' }
     };
   }
-  
+
+  // The realtime model reaches for `add` (and occasionally `create`) when it
+  // wants a new sticky note — `display` is an awkward verb for "create". We
+  // keep `display` as the canonical internal action so existing prompts and
+  // any in-the-wild persisted state still resolve, but normalize the model's
+  // natural verbs at the boundary.
+  const action =
+    args.action === 'add' || args.action === 'create' ? 'display' : args.action;
+
   try {
-    switch (args.action) {
+    switch (action) {
       case 'display': {
         if (!args.content) {
           return {
@@ -62,38 +70,19 @@ export async function note(args: {
         }
 
         const noteId = generateUUID();
-        
-        // Get screen dimensions for random positioning if not specified
-        let screenWidth = 800;
-        let screenHeight = 600;
-        
-        if (args.x === undefined || args.x === null || args.y === undefined || args.y === null) {
-          const callId = `note_dimensions_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-          const dimensionsPromise = context.requestManager.createPendingRequest(callId, 'tool_result', 5000);
-          
-          context.sendClientEvent({
-            type: 'ui.note.getScreenDimensions',
-            data: { callId }
-          });
-          
-          const dimensionsResult = await dimensionsPromise;
-          screenWidth = dimensionsResult.width || 800;
-          screenHeight = dimensionsResult.height || 600;
-        }
-        
-        // Use provided dimensions or defaults
-        const noteW = args.w ?? NOTE_DEFAULTS.w;
-        const noteH = args.h ?? NOTE_DEFAULTS.h;
-        
+
+        // x/y/w/h are retained on the Note type for persistence compatibility
+        // but no longer drive rendering (notes live in the Notes tab grid).
+        // Use defaults; no screen-dimension round-trip needed any more.
         const noteItem: Note = {
           id: noteId,
           kind: 'note',
           content: args.content,
           title: generateNoteTitle(args.content),
-          x: args.x ?? Math.random() * (screenWidth - noteW),
-          y: args.y ?? Math.random() * (screenHeight - noteH),
-          w: noteW,
-          h: noteH,
+          x: 0,
+          y: 0,
+          w: NOTE_DEFAULTS.w,
+          h: NOTE_DEFAULTS.h,
           color: args.color ?? validColors[Math.floor(Math.random() * validColors.length)],
           visible: true,
           zIndex: 10000,
@@ -120,7 +109,7 @@ export async function note(args: {
           data: {
             noteId: noteItem.id,
             title: noteItem.title,
-            message: `Note created. Use 'present' tool to move/resize/show/hide.`
+            message: 'Note created in the document panel Notes tab.'
           }
         };
       }
@@ -168,41 +157,9 @@ export async function note(args: {
         };
       }
 
-      case 'toggleEffect': {
-        if (!args.noteId) {
-          return {
-            status: 'error',
-            data: { error: 'noteId is required for toggleEffect action' }
-          };
-        }
-
-        const noteItem = await context.noteStore.getNote(args.noteId);
-        if (!noteItem) {
-          return {
-            status: 'error',
-            data: { error: 'Note not found' }
-          };
-        }
-
-        const updatedNote = await context.noteStore.updateNote(args.noteId, { effect: !noteItem.effect });
-        
-        // Send update event to frontend
-        const callId = `note_effect_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        const resultPromise = context.requestManager.createPendingRequest(callId, 'tool_result', 5000);
-        
-        context.sendClientEvent({
-          type: 'ui.note.update',
-          data: { callId, noteId: args.noteId, updates: { effect: updatedNote?.effect } }
-        });
-        
-        await resultPromise;
-        
-        logger.debug({ noteId: args.noteId }, 'note toggleEffect completed');
-        return {
-          status: 'success',
-          data: updatedNote
-        };
-      }
+      // toggleEffect removed with the split-panel redesign — notes render in
+      // a grid and have no floating surface for effects. See
+      // docs/superpowers/specs/2026-04-15-panel-layout-and-tool-redesign.md §5.4.
 
       case 'get': {
         if (!args.noteId) {
@@ -274,7 +231,7 @@ export async function note(args: {
       default:
         return {
           status: 'error',
-          data: { error: `Invalid action: ${args.action}. Valid actions are: display, changeColor, toggleEffect, get, list, delete` }
+          data: { error: `Invalid action: ${args.action}. Valid actions are: add, list, get, changeColor, delete` }
         };
     }
   } catch (error) {
