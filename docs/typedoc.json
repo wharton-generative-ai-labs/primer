@@ -42,9 +42,9 @@
   "expandObjects": false,
   "expandParameters": false,
   "parametersFormat": "table",
-  "propertiesFormat": "table",
+  "propertiesFormat": "list",
   "enumMembersFormat": "table",
-  "typeDeclarationFormat": "table",
+  "typeDeclarationFormat": "list",
   "indexFormat": "table",
   "textContentMappings": {
     "header.title": "{projectName}",

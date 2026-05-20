@@ -14,6 +14,7 @@ Learn how to build interactive AI experiences with Primer.
 - [Agents](/developer/experiences/agents) - Designing AI personalities
 - [Scenes & Sounds](/developer/experiences/scenes-and-sounds) - Visual and audio elements
 - [Tools](/developer/experiences/tools) - Agent capabilities
+- [Workflow Phases](/developer/experiences/workflow-phases) - Multi-phase experiences with a navigation strip
 
 ## Quick Start
 

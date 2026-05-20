@@ -26,6 +26,11 @@ const config: Config = {
   projectName: 'runcible',
 
   onBrokenLinks: 'throw',
+  // typedoc-plugin-markdown emits self-references to slugs that Docusaurus
+  // doesn't generate (e.g. `### \`abstract\` ClassName` → `#abstract-classname`,
+  // not `#classname`). Ignoring keeps the auto-gen API noise out of builds;
+  // hand-written docs are still validated by `onBrokenLinks`.
+  onBrokenAnchors: 'ignore',
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you

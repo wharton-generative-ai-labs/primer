@@ -26,7 +26,6 @@ const sidebars: SidebarsConfig = {
         'user-guide/key-concepts',
         'user-guide/getting-started',
         'user-guide/using-experiences',
-        'user-guide/visual-guide',
       ],
     },
   ],
@@ -71,6 +70,7 @@ const sidebars: SidebarsConfig = {
           label: 'Configuration',
           items: [
             'developer/architecture/experience-format',
+            'developer/architecture/workflow-phases',
             'developer/architecture/ai-providers',
           ],
         },
@@ -107,6 +107,7 @@ const sidebars: SidebarsConfig = {
         'developer/experiences/agents',
         'developer/experiences/scenes-and-sounds',
         'developer/experiences/tools',
+        'developer/experiences/workflow-phases',
       ],
     },
     {

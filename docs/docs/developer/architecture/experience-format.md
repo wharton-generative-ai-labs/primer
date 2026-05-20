@@ -200,6 +200,54 @@ All paths are relative to the experience directory.
 
 **Available Voices**: `alloy`, `echo`, `fable`, `onyx`, `nova`, `shimmer`
 
+### Workflow Phases (optional)
+
+Split an experience into ordered beats. When omitted, the experience runs in single-screen mode with no navigation strip.
+
+```json
+{
+  "workflowPhases": [
+    {
+      "id": "warmup",
+      "title": "Get oriented",
+      "heading": "Let's get you ready to pitch.",
+      "initialAgent": "narrator"
+    },
+    {
+      "id": "pitch",
+      "title": "Pitch a VC",
+      "initialAgent": "mentor"
+    }
+  ],
+  "initialWorkflowPhase": "warmup",
+  "showPhaseCount": true
+}
+```
+
+**Phase fields**:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Stable, unique within the experience |
+| `title` | string | Yes | Strip label — `Phase N of M — {title}` |
+| `heading` | string | No | Central headline above the layout (optional) |
+| `description` | string | No | Surfaced to the agent, not the user |
+| `initialAgent` | string | No | Agent on first entry. Must exist in `agents` |
+| `reentryAgent` | string | No | Authoritative agent override on every return |
+| `objectives` | array | No | `{ id, description }` items, listed when skipped |
+| `promptFragments` | object | No | `coldStart` / `reentry` / `afterSkip` strings |
+| `mode` | string | No | `'interactive'` (default), `'build'`, or `'result'`. Picks the top-level surface. |
+| `buildConfig` | object | No | `{ title, subtitle }` for `mode: 'build'` |
+
+**Experience-level options**:
+
+| Field | Default | Behavior |
+|-------|---------|----------|
+| `initialWorkflowPhase` | first phase id | Override the starting phase |
+| `showPhaseCount` | `true` | When `false`, hides `Phase N of M` from the strip |
+
+See [Workflow Phases (architecture)](/developer/architecture/workflow-phases) for runtime semantics, transition ops, and event log; [Workflow Phases (authoring)](/developer/experiences/workflow-phases) for an author-facing walkthrough.
+
 ### Tool Groups
 
 Common tool groups:

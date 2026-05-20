@@ -31,6 +31,10 @@ A **Session** is a single interaction with an experience. Your conversation hist
 
 **Artifacts** are documents created during your session - summaries, reports, guides, or any other files the agent generates for you.
 
+## Phases
+
+Some experiences are split into ordered **phases** — for example, a warm-up, an activity, and a debrief. When an experience uses phases, you'll see a strip across the top showing which phase you're in and a Next button that lights up once your AI guide agrees you're ready to move on. You can use Back at any time to revisit a previous phase.
+
 :::tip
 Check out [What is Primer?](/user-guide/what-is-primer) for a deeper explanation of these concepts.
 :::
