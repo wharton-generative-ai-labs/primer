@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
 import path from 'path';
 import { createModuleLogger } from '@/lib/logger';
+import { assertSafeExperienceId, assertSafeRelativePath } from '@/app/lib/file-utils';
 
 const logger = createModuleLogger('experience-readme');
 
@@ -24,24 +25,22 @@ export async function GET(
     const { id: experienceId } = await context.params;
     const { searchParams } = new URL(request.url);
     const docPath = searchParams.get('docPath');
-    
-    const storage = StorageServiceFactory.getInstance();
-    
-    // Determine which file to read
+
     let filePath: string;
-    if (docPath) {
-      // Validate that docPath doesn't try to escape the experience directory
-      const normalizedDocPath = path.normalize(docPath);
-      if (normalizedDocPath.includes('..') || path.isAbsolute(normalizedDocPath)) {
-        return NextResponse.json(
-          { error: 'Invalid document path' },
-          { status: 400 }
-        );
+    try {
+      assertSafeExperienceId(experienceId);
+      if (docPath) {
+        assertSafeRelativePath(docPath);
+        filePath = path.join(experienceId, docPath);
+      } else {
+        filePath = path.join(experienceId, 'README.md');
       }
-      filePath = path.join(experienceId, normalizedDocPath);
-    } else {
-      filePath = path.join(experienceId, 'README.md');
+    } catch (validationError) {
+      logger.warn({ err: validationError, experienceId, docPath }, 'Rejected unsafe readme request');
+      return NextResponse.json({ error: 'Invalid document path' }, { status: 400 });
     }
+
+    const storage = StorageServiceFactory.getInstance();
     
     // Check if file exists
     const exists = await storage.fileExists(filePath);

@@ -12,6 +12,9 @@ import path from 'path';
 import { createModuleLogger } from '@/lib/logger';
 import { ComponentInfo } from '@/app/lib/tools/ui/components/types';
 import { StorageServiceFactory } from '@/app/lib/storage/StorageServiceFactory';
+import { assertSafeExperienceId } from '@/app/lib/file-utils';
+
+const SAFE_COMPONENT_ID = /^[A-Za-z0-9_-]+$/;
 
 const logger = createModuleLogger('ComponentAPI');
 
@@ -24,11 +27,21 @@ export async function GET(
 ) {
   try {
     const { id: experienceId, componentId } = await params;
-    
+
+    try {
+      assertSafeExperienceId(experienceId);
+      if (!SAFE_COMPONENT_ID.test(componentId)) {
+        throw new Error(`Invalid component ID: ${componentId}`);
+      }
+    } catch (validationError) {
+      logger.warn({ err: validationError, experienceId, componentId }, 'Rejected unsafe component request');
+      return NextResponse.json({ error: 'Invalid component ID' }, { status: 400 });
+    }
+
     logger.info(`Loading component: ${componentId} for experience: ${experienceId}`);
-    
+
     const storage = StorageServiceFactory.getInstance();
-    
+
     // Build path to component file (relative to storage root)
     const componentPath = path.join(
       experienceId,
