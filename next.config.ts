@@ -9,6 +9,7 @@ const withBundleAnalyzer = process.env.ANALYZE === 'true'
 
 const nextConfig: NextConfig = {
   //output: "export",
+  optimizeFonts: false,
   eslint: {
     // Skip ESLint in production builds (devDependencies not available)
     ignoreDuringBuilds: process.env.NODE_ENV === 'production'

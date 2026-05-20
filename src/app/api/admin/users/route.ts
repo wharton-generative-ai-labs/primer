@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/authOptions';
 import { Permission, ROLES, RoleKey, isEnvDefinedUser } from '@/config/auth';
 import { 
   getFileBasedUsersData, 
@@ -11,6 +12,7 @@ import { rateLimit, getClientIdentifier, rateLimitConfigs } from '@/app/lib/rate
 import { createModuleLogger } from '@/lib/logger';
 import { auditAuthorizationFailure, auditAdminAction } from '@/lib/audit-logger';
 import { env } from '@/config/env';
+import { getEffectiveUserEmail } from '@/lib/devAuth';
 
 const logger = createModuleLogger('admin-users');
 
@@ -48,8 +50,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const session = await getServerSession();
-    const userEmail = session?.user?.email;
+    const session = await getServerSession(authOptions);
+    const userEmail = getEffectiveUserEmail(session?.user?.email);
     
     if (!userEmail) {
       await auditAuthorizationFailure('anonymous', request, {
@@ -149,8 +151,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const session = await getServerSession();
-    const userEmail = session?.user?.email;
+    const session = await getServerSession(authOptions);
+    const userEmail = getEffectiveUserEmail(session?.user?.email);
     
     if (!userEmail) {
       await auditAuthorizationFailure('anonymous', request, {

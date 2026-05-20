@@ -223,8 +223,10 @@ app.prepare().then(() => {
       credentials: true
     },
     transports: ['websocket', 'polling'],
-    pingTimeout: 60000,
-    pingInterval: 25000
+    // Long timeouts to survive slow AI API calls (Design Agent can take 5+ minutes).
+    // The event loop can stall during large Anthropic responses, causing missed pings.
+    pingTimeout: 10 * 60 * 1000,  // 10 minutes
+    pingInterval: 60 * 1000        // 1 minute
   });
 
   // Helper function to create a new session
@@ -261,9 +263,9 @@ app.prepare().then(() => {
         logger.debug({ sessionId: existingSessionId }, 'Adopted client session ID (not in socket store)');
       }
     } else {
-      // No session ID from client - do NOT create a new one
-      // Sessions should only be created through the /play/ route via ensureSession()
-      // This connection can still receive broadcasts but won't have session-specific functionality
+      // No session ID from client - do NOT create a new one. The /play/ RSC
+      // (or chooseSessionAction) is the sole session creator; sockets without
+      // an id can still receive broadcasts but stay session-less.
       logger.debug('Client connected without session ID - operating in session-less mode');
       socket.data.sessionId = undefined;
     }
@@ -405,7 +407,6 @@ app.prepare().then(() => {
       try {
         // Import tool implementations dynamically
         const { observe } = await import('./src/app/lib/tools/builtin/observe-tool');
-        const { present } = await import('./src/app/lib/tools/builtin/present-tool');
         const { slide } = await import('./src/app/lib/tools/ui/slides');
         const { information } = await import('./src/app/lib/tools/builtin/information-tool');
         const { note } = await import('./src/app/lib/tools/builtin/note-tool');
@@ -415,7 +416,6 @@ app.prepare().then(() => {
         // Map tool names to implementations
         const toolMap: Record<string, any> = {
           observe,
-          present,
           slide,
           information,
           note,
@@ -462,20 +462,14 @@ app.prepare().then(() => {
               // Send events back to the client
               if (event.type === 'ui.observe.request') {
                 socket.emit('ui.observe.request', event.data);
-              } else if (event.type === 'ui.element.show') {
-                socket.emit('ui.element.show', event.data);
-              } else if (event.type === 'ui.element.hide') {
-                socket.emit('ui.element.hide', event.data);
-              } else if (event.type === 'ui.element.move') {
-                socket.emit('ui.element.move', event.data);
-              } else if (event.type === 'ui.element.resize') {
-                socket.emit('ui.element.resize', event.data);
-              } else if (event.type === 'ui.element.maximize') {
-                socket.emit('ui.element.maximize', event.data);
-              } else if (event.type === 'ui.element.destroy') {
-                socket.emit('ui.element.destroy', event.data);
               } else if (event.type === 'ui.slide.create') {
                 socket.emit('ui.slide.create', event.data);
+              } else if (event.type === 'ui.slide.list') {
+                socket.emit('ui.slide.list', event.data);
+              } else if (event.type === 'ui.slide.close') {
+                socket.emit('ui.slide.close', event.data);
+              } else if (event.type === 'ui.document.visibility') {
+                socket.emit('ui.document.visibility', event.data);
               } else if (event.type === 'ui.component.create') {
                 socket.emit('ui.component.create', event.data);
               } else if (event.type === 'ui.component.updateState') {
@@ -496,13 +490,23 @@ app.prepare().then(() => {
                 socket.emit('ui.note.update', event.data);
               } else if (event.type === 'ui.note.getScreenDimensions') {
                 socket.emit('ui.note.getScreenDimensions', event.data);
+              } else {
+                // Loud warning for events the allow-list doesn't forward.
+                // Previously these were silently dropped, which made new
+                // tools look broken ("the AI said it had technical issues")
+                // with no server signal to explain why. If you added a new
+                // ui.* event type, also add it to the allow-list above.
+                logger.warn(
+                  { eventType: event.type, callId: event.data?.callId },
+                  'sendClientEvent: unknown event type, dropping'
+                );
               }
             }
           };
           
           logger.debug({ experienceId, sessionId }, 'Created full tool context with artifact support');
         } else {
-          // Minimal context for UI-only tools (observe, present, slide.show)
+          // Minimal context for UI-only tools (observe, slide.show)
           // Note: Tools that need artifact/information/note access will fail gracefully
           
           // Create stores if we have the required IDs
@@ -525,20 +529,14 @@ app.prepare().then(() => {
               // Send events back to the client
               if (event.type === 'ui.observe.request') {
                 socket.emit('ui.observe.request', event.data);
-              } else if (event.type === 'ui.element.show') {
-                socket.emit('ui.element.show', event.data);
-              } else if (event.type === 'ui.element.hide') {
-                socket.emit('ui.element.hide', event.data);
-              } else if (event.type === 'ui.element.move') {
-                socket.emit('ui.element.move', event.data);
-              } else if (event.type === 'ui.element.resize') {
-                socket.emit('ui.element.resize', event.data);
-              } else if (event.type === 'ui.element.maximize') {
-                socket.emit('ui.element.maximize', event.data);
-              } else if (event.type === 'ui.element.destroy') {
-                socket.emit('ui.element.destroy', event.data);
               } else if (event.type === 'ui.slide.create') {
                 socket.emit('ui.slide.create', event.data);
+              } else if (event.type === 'ui.slide.list') {
+                socket.emit('ui.slide.list', event.data);
+              } else if (event.type === 'ui.slide.close') {
+                socket.emit('ui.slide.close', event.data);
+              } else if (event.type === 'ui.document.visibility') {
+                socket.emit('ui.document.visibility', event.data);
               } else if (event.type === 'ui.component.create') {
                 socket.emit('ui.component.create', event.data);
               } else if (event.type === 'ui.component.updateState') {
@@ -559,6 +557,16 @@ app.prepare().then(() => {
                 socket.emit('ui.note.update', event.data);
               } else if (event.type === 'ui.note.getScreenDimensions') {
                 socket.emit('ui.note.getScreenDimensions', event.data);
+              } else {
+                // Loud warning for events the allow-list doesn't forward.
+                // Previously these were silently dropped, which made new
+                // tools look broken ("the AI said it had technical issues")
+                // with no server signal to explain why. If you added a new
+                // ui.* event type, also add it to the allow-list above.
+                logger.warn(
+                  { eventType: event.type, callId: event.data?.callId },
+                  'sendClientEvent: unknown event type, dropping'
+                );
               }
             }
           };
@@ -668,18 +676,6 @@ app.prepare().then(() => {
       } else {
         requestManager.rejectPendingRequest(data.callId, new Error(data.data?.error || 'UI operation failed'));
       }
-    });
-    
-    // Handle ui.observe.response from client
-    socket.on('ui.observe.response', (data) => {
-      logger.debug({ callId: data.callId, elementCount: data.elements.length }, 'Received ui.observe.response from client');
-      
-      // Resolve the pending observe request
-      requestManager.resolvePendingRequest(data.callId, {
-        elements: data.elements,
-        viewport: data.viewport,
-        insets: data.insets
-      });
     });
     
     // Handle component.event from client (user interaction with component)
@@ -843,4 +839,3 @@ app.prepare().then(() => {
   console.error('Failed to start server:', err);
   process.exit(1);
 });
-
