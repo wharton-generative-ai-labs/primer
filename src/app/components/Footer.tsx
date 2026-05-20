@@ -7,14 +7,9 @@ import { ArrowLeft, Bug, Info, MessageCircle, NotepadText, Pencil, ShieldCheck }
 import { cn } from '@/lib/utils'
 import { Permission } from '@/config/auth'
 import { usePermissions } from '@/app/hooks/usePermissions'
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from '@/components/ui/hover-card'
 import { Button } from '@/components/ui/button'
 import { Toggle } from '@/components/ui/toggle'
-import { getVersionInfo } from '../../version'
+import packageJson from '../../../package.json'
 
 /** outline + light text on the dark lesson/home footer bar (plain buttons) */
 const footerBtnOutline = cn(
@@ -90,11 +85,7 @@ export function Footer({
   const isAuthenticated = status === 'authenticated'
   const { can } = usePermissions()
   const isAdmin = can(Permission.ADMIN_USERS)
-  const versionInfo = getVersionInfo()
-  const buildDate = versionInfo.buildTime
-    ? new Date(versionInfo.buildTime).toLocaleString()
-    : 'Unknown'
-  const subject = runningSubject ?? `Primer ${versionInfo.version}`
+  const subject = runningSubject ?? `Primer ${packageJson.version}`
 
   const showRightUtilityButtons =
     type === 'builder' || type === 'lesson' || type === 'preview'
@@ -181,23 +172,10 @@ export function Footer({
         </div>
 
         <div className="flex items-center gap-6">
-          <HoverCard>
-            <HoverCardTrigger asChild>
-              <div className="flex cursor-help flex-col gap-0.5 text-right text-xs leading-4 text-white">
-                <span>Currently running:</span>
-                <span className="font-semibold">{subject}</span>
-              </div>
-            </HoverCardTrigger>
-            <HoverCardContent className="w-80 border-gray-700 bg-black/90 z-modal">
-              <div className="text-xs text-white/70">
-                <p className="mb-1 font-semibold">Build Information:</p>
-                <p>Version: {versionInfo.version}</p>
-                <p>Branch: {versionInfo.gitBranch || 'Unknown'}</p>
-                <p>Commit: {versionInfo.gitCommit?.substring(0, 7) || 'Unknown'}</p>
-                <p>Built: {buildDate}</p>
-              </div>
-            </HoverCardContent>
-          </HoverCard>
+          <div className="flex flex-col gap-0.5 text-right text-xs leading-4 text-white">
+            <span>Currently running:</span>
+            <span className="font-semibold">{subject}</span>
+          </div>
 
           {type === 'home' && isAuthenticated && (
             <div className="flex items-center gap-2.5">
