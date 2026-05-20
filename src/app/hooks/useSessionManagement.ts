@@ -11,6 +11,7 @@
 import { useRef, useCallback, useState } from 'react';
 import { AgentConfig, SessionStatus, AIConfiguration } from '../lib/types';
 import { ToolRegistry } from '@/app/lib/ToolRegistry';
+import { sanitizeVoice } from '@/app/lib/voices';
 import { createModuleLogger } from '@/lib/logger';
 
 const logger = createModuleLogger('useSessionManagement');
@@ -27,7 +28,6 @@ interface UseSessionManagementProps {
   isDebugModeEnabled: boolean;
   addTranscriptBreadcrumb: (message: string, data?: any) => void;
   setIsAIAudioPlaying: (isPlaying: boolean) => void;
-  setIsUserAudioPlaying: (isPlaying: boolean) => void;
 }
 
 export function useSessionManagement({
@@ -42,7 +42,6 @@ export function useSessionManagement({
   isDebugModeEnabled,
   addTranscriptBreadcrumb,
   setIsAIAudioPlaying,
-  setIsUserAudioPlaying,
 }: UseSessionManagementProps) {
   const lastAgentRef = useRef<AgentConfig | undefined>(undefined);
   const lastSessionUpdateRef = useRef<string>('');
@@ -114,7 +113,6 @@ export function useSessionManagement({
 
       // Reset audio states when changing agents
       setIsAIAudioPlaying(false);
-      setIsUserAudioPlaying(false);
 
       // Update lastAgentRef before reconnecting to prevent race conditions
       lastAgentRef.current = currentAgent;
@@ -201,7 +199,7 @@ export function useSessionManagement({
         audio: {
           input: audioInput,
           output: {
-            voice: currentAgent.voice || "alloy",
+            voice: sanitizeVoice(currentAgent.voice),
           },
         },
         ...(reasoning ? { reasoning } : {}),
@@ -231,7 +229,6 @@ export function useSessionManagement({
     isDebugModeEnabled,
     addTranscriptBreadcrumb,
     setIsAIAudioPlaying,
-    setIsUserAudioPlaying,
     getToolsForAgent,
     hasAudio,
   ]);

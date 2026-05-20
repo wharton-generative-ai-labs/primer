@@ -1,4 +1,5 @@
 import { ComponentConfig } from './tools/ui/components/types';
+import type { WorkflowPhaseConfig } from '@/app/lib/workflow-phases';
 
 export interface AppProps {
   setAvailableScenes: (scenes: Record<string, { path: string; url: string }>) => void;
@@ -49,6 +50,15 @@ export interface ToolDefinition {
   handlerPath?: string;  // Path to the script containing the handler
 }
 
+/**
+ * Derived PlayPage arrangement. Agents do not set this directly; it is inferred
+ * from whether the document section is visible. Scene is no longer part of the
+ * layout — it renders as a background layer inside `PrimerBackground`.
+ */
+export type WorkspaceLayout =
+  | 'document-only'
+  | 'chat-only';
+
 export interface TranscriptItem {
   itemId: string;
   type: "MESSAGE" | "BREADCRUMB";
@@ -60,6 +70,9 @@ export interface TranscriptItem {
   createdAtMs: number;
   status: "IN_PROGRESS" | "DONE";
   isHidden: boolean;
+  agentKey?: string;
+  agentName?: string;
+  breadcrumbKind?: "handoff" | "tool-error";
 }
 
 export interface Log {
@@ -187,6 +200,14 @@ export interface AgentConfig {
   name: string;
   voice?: string; // Optional for backend agents
   publicDescription: string;
+  /**
+   * For backend agents: contract describing what an orchestrator must pass when
+   * invoking this agent via `agent({ action: 'delegate' })` — required
+   * artifactIds, taskDescription shape, expected return value. Surfaced in the
+   * `agent` tool's `discover` action so callers don't need to carry this prose
+   * in their own prompts. Plain Markdown.
+   */
+  delegationContract?: string;
   instructions: string;
   temperature: number;
   tools: Tool[];
@@ -307,6 +328,11 @@ export interface ExperienceConfig {
     name: string;
     voice?: string; // Optional for backend agents
     publicDescription: string;
+    /**
+     * Backend-only: call-shape contract surfaced via `agent discover`. See
+     * AgentConfig.delegationContract for the full description.
+     */
+    delegationContract?: string;
     instructions?: string;
     availableTools?: string[]; // @deprecated - use toolSets instead
     toolGroups?: string[]; // @deprecated - use toolSets instead. Tool groups this agent has access to (e.g., ['builtin', 'experience'])
@@ -324,6 +350,42 @@ export interface ExperienceConfig {
     bundled?: string[];
     plugins?: string[]; // @deprecated (configVersion 1) - Array of plugin package names
   };
+  /**
+   * Per-key override behaviour for supplemental instructions. By default the
+   * platform supplemental and the experience's supplemental for the same key
+   * are concatenated. Set `replace: true` for a given key to drop the
+   * platform content and use the experience's file exclusively.
+   *
+   * Example:
+   *   "instructionOverrides": { "tools": { "replace": true } }
+   */
+  instructionOverrides?: Record<string, { replace?: boolean }>;
+  /**
+   * Ordered list of workflow phases. When absent (or empty), the experience
+   * runs in single-screen mode with no phase navigation strip.
+   */
+  workflowPhases?: WorkflowPhaseConfig[];
+  /**
+   * Optional override for the starting phase id. Defaults to
+   * `workflowPhases[0].id` when omitted.
+   */
+  initialWorkflowPhase?: string;
+  /**
+   * When `false`, the navigation strip drops the `Phase N of M` position
+   * indicator and shows just the phase title. Defaults to `true` (count
+   * shown). Use this for experiences where the structure is meant to feel
+   * conversational rather than progressive — or where future side-quest
+   * phases would make a fixed count misleading.
+   */
+  showPhaseCount?: boolean;
+  /**
+   * When `true`, the platform auto-maintains a `conversation_transcript`
+   * markdown artifact from the client's TranscriptContext message list.
+   * Lets agents reference the transcript by id without producing it
+   * themselves (which voice/realtime agents routinely fail by passing
+   * empty content). Default `false`.
+   */
+  autoTranscript?: boolean;
 }
 
 export interface ExperienceMetadata {
@@ -334,6 +396,27 @@ export interface ExperienceMetadata {
   api?: 'realtime' | 'responses';
   authorEmail?: string; // Email of the experience author for permission checks
   hasReadme?: boolean; // Whether the experience has a README.md file
+  kind?: string; // Experience kind: 'meta', 'bundled', 'template', 'debugger', 'user'
+  /** Authored initial agent key. Falls through from ConfigResponse.metadata. */
+  initialAgent?: string;
+  /**
+   * Ordered list of workflow phases declared by the experience. Empty/undefined
+   * means single-screen mode (no phase navigation strip).
+   */
+  workflowPhases?: WorkflowPhaseConfig[];
+  /** Optional override for the starting workflow phase id. */
+  initialWorkflowPhase?: string;
+  /** When `false`, the navigation strip hides the `Phase N of M` count. */
+  showPhaseCount?: boolean;
+  /**
+   * When `true`, the platform auto-maintains a `conversation_transcript`
+   * markdown artifact derived from the client's TranscriptContext message
+   * list. Agents reference the artifact id without producing the body
+   * themselves, eliminating the empty-content failure mode where voice
+   * agents would call `artifact create` with no content. Default `false`
+   * — opt in per experience.
+   */
+  autoTranscript?: boolean;
 }
 
 export interface ConfigResponse {
@@ -348,6 +431,23 @@ export interface ConfigResponse {
     logo?: Resource;
     description: string;
     authorEmail?: string; // Email of the experience author for permission checks
+    /** Authored initial agent key, sourced from `ExperienceConfig.initialAgent`. */
+    initialAgent?: string;
+    /**
+     * Ordered list of workflow phases. Empty/undefined means single-screen
+     * mode (no navigation strip).
+     */
+    workflowPhases?: WorkflowPhaseConfig[];
+    /** Optional override for the starting workflow phase id. */
+    initialWorkflowPhase?: string;
+    /** When `false`, the navigation strip hides the `Phase N of M` count. */
+    showPhaseCount?: boolean;
+    /**
+     * When `true`, the platform auto-maintains a `conversation_transcript`
+     * artifact from the client's TranscriptContext. See
+     * {@link ExperienceMetadata.autoTranscript}.
+     */
+    autoTranscript?: boolean;
   };
   tools?: Record<string, ToolDefinition>;
   aiConfigurations: Record<string, AIConfiguration>;

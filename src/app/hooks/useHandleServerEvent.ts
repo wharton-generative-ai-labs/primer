@@ -5,10 +5,12 @@ import { useTranscript } from "@/app/contexts/TranscriptContext";
 import { useEvent } from "@/app/contexts/EventContext";
 import { useScene } from "@/app/hooks/useScene";
 import { useFileUpload } from "@/app/contexts/FileUploadContext";
-import { useRef } from "react";
+import { useContext, useRef } from "react";
 import { ToolRegistry } from "@/app/lib/ToolRegistry";
 import { useExperienceUrl } from "@/app/hooks/useExperienceUrl";
 import { useArtifact } from "@/app/contexts/ArtifactContext";
+import { useLayout } from "@/app/contexts/LayoutContext";
+import { WorkflowPhaseContext } from "@/app/contexts/WorkflowPhaseContext";
 import { getSceneUrl } from '@/app/lib/scene-utils';
 import { getSceneManager } from '@/app/lib/SceneManager';
 import { ToolContext } from '@/app/lib/tools/types';
@@ -25,16 +27,7 @@ import { ImageGeneratorToolContext, getImageGeneratorManager } from '@/app/lib/t
 // ✅ CENTRALIZED IMPORTS - UI components migrated
 import { MermaidToolContext, getMermaidManager } from '@/app/lib/tools/ui/mermaid/index';
 import { toast } from "@/hooks/use-toast";
-// ✅ CENTRALIZED IMPORTS - UI event handlers for server-first tools
-import { 
-  handleUIElementShow, 
-  handleUIElementHide, 
-  handleUIElementMove, 
-  handleUIElementResize,
-  handleUIElementMaximize,
-  handleUIElementDestroy,
-  handleUIObserveRequest
-} from '@/app/lib/tools/client/ui-event-handlers';
+import { pushInlineChatToast } from '@/app/lib/inlineChatToasts';
 import { handleToolResponse, getGlobalSocket } from '@/app/lib/tools/client/tool-calling-shim';
 
 export interface UseHandleServerEventParams {
@@ -43,7 +36,6 @@ export interface UseHandleServerEventParams {
   agents: Record<string, AgentConfig>;
   sendClientEvent: (eventObj: any, eventNameSuffix?: string) => void;
   setIsAIAudioPlaying: (isPlaying: boolean) => void;
-  setIsUserAudioPlaying: (isPlaying: boolean) => void;
   setQueuedAgentTransfer: (key: string | null) => void;
   isDebugModeEnabled: boolean;
   showChecklist?: (artifactId: string) => void;
@@ -57,7 +49,6 @@ export function useHandleServerEvent({
   agents,
   sendClientEvent,
   setIsAIAudioPlaying,
-  setIsUserAudioPlaying,
   setQueuedAgentTransfer,
   isDebugModeEnabled,
   showChecklist,
@@ -68,17 +59,42 @@ export function useHandleServerEvent({
     transcriptItems,
     addTranscriptBreadcrumb,
     addTranscriptBreadcrumbWithId,
+    addTranscriptHandoff,
+    addTranscriptToolError,
     updateTranscriptBreadcrumb,
     addTranscriptMessage,
     updateTranscriptMessage,
     updateTranscriptItemStatus,
   } = useTranscript();
   const { logServerEvent } = useEvent();
-  const { setScene } = useScene();
+  const { setScene, showScene, hideScene, currentScene, isSceneVisible } = useScene();
   const { showFileUpload } = useFileUpload();
   const { getExperienceId } = useExperienceUrl();
   const toolRegistry = ToolRegistry.getInstance();
-  const { listArtifacts, createArtifact, deleteArtifact, updateArtifact, getArtifact } = useArtifact();
+  const {
+    listArtifacts,
+    createArtifact,
+    deleteArtifact,
+    updateArtifact,
+    getArtifact,
+    showContent,
+    clearContent,
+    activeContent,
+    library,
+    viewedContent,
+    artifacts,
+    viewState,
+  } = useArtifact();
+  const {
+    isDocumentVisible,
+    setDocumentVisible,
+    getWorkspaceLayout,
+    documentTab,
+  } = useLayout();
+  // Optional: not every harness mount wires the provider. Tools that depend
+  // on the workflow-phase capability degrade to "not available in context"
+  // when the provider is absent.
+  const workflowPhaseContext = useContext(WorkflowPhaseContext);
 
   const handleFunctionCall = async (function_request: {
     name: string;
@@ -110,15 +126,26 @@ export function useHandleServerEvent({
       agents,
       experienceId,
       setScene,
+      showScene,
+      hideScene,
+      setDocumentVisible,
       sendClientEvent,
       showFileUpload,
       addTranscriptBreadcrumb,
+      addTranscriptHandoff,
       setQueuedAgentTransfer,
       listArtifacts,
-      createArtifact: (name: string, content: string, type: string, metadata?: any) => createArtifact(name, content, type, metadata),
+      createArtifact: (name: string, content: string, type: string, metadata?: any) =>
+        createArtifact(name, content, type, metadata, { agentKey: selectedAgentKey }),
       deleteArtifact,
-      updateArtifact: (id: string, content: string, metadata?: any) => updateArtifact(id, content, metadata),
-      getArtifact,
+      updateArtifact: (id: string, content: string, metadata?: any) =>
+        updateArtifact(id, content, metadata, { agentKey: selectedAgentKey }),
+      // ToolContext signature is (id, includeContent?, rev?) — includeContent
+      // is legacy/ignored, but kept in the type for backward compat. The
+      // ArtifactContext getArtifact only takes (id, rev?), so wrap to drop
+      // the unused middle arg.
+      getArtifact: (id: string, _includeContent?: boolean, rev?: number) =>
+        getArtifact(id, rev),
       getSceneUrl,
       getAvailableScenes: () => getSceneManager().getAvailableScenes(),
       addCustomScene: (sceneName: string, imageUrl: any) => {
@@ -144,8 +171,22 @@ export function useHandleServerEvent({
       getResourceContent: (experienceId, path) => getExperienceManager().getResourceContent(experienceId, path),
       searchWeb: (query) => getWebSearchManager().searchWeb(query),
       generateImage: (prompt, options) => getImageGeneratorManager().generateImage(prompt, options),
-      showMermaidDiagram: (title: string, diagram: string) => getMermaidManager().showMermaidDiagram(title, diagram),
-      hideDiagram: () => getMermaidManager().hideDiagram(),
+      showMermaidDiagram: (title: string, diagram: string) => {
+        // Route diagrams into the split-panel DocumentPanel (single content slot)
+        // rather than the old full-screen overlay. Keep the manager call in sync
+        // in case anything else still reads from it.
+        const diagramId = `diagram-${generateUUID()}`;
+        showContent({ kind: 'diagram', id: diagramId, name: title, diagram });
+        setDocumentVisible(true);
+        return getMermaidManager().showMermaidDiagram(title, diagram);
+      },
+      hideDiagram: () => {
+        // In the split-panel layout the right pane holds one piece of content
+        // at a time, so `hideDiagram` has ambiguous semantics — it only made
+        // sense when diagrams were a separate overlay. We keep the manager call
+        // for back-compat; the pane clears when the next show* call replaces it.
+        return getMermaidManager().hideDiagram();
+      },
       // Note: Information and note tools are now backend-first, they use their respective stores on the server
       showChecklist: showChecklist || (() => logger.warn({}, 'showChecklist not available')),
       hideChecklist: hideChecklist || (() => logger.warn({}, 'hideChecklist not available')),
@@ -154,6 +195,39 @@ export function useHandleServerEvent({
           title: options.title,
           variant: options.variant || 'default',
         });
+        if (!options.variant || options.variant === 'default') {
+          pushInlineChatToast(options.title);
+        }
+        // Surface an actionable failure signal on non-interactive phase
+        // surfaces. When the orchestrator reports a destructive toast (e.g.
+        // "I'm having trouble delegating...") during a build/result phase,
+        // the user has no chat input to ask for a retry — they're stuck
+        // staring at a frozen checklist. Emit a `phase-failure` window event
+        // so BuildPhaseSurface / ResultPhaseSurface can render a Retry
+        // button. Interactive phases keep the plain toast since the user
+        // can still type a follow-up.
+        if (options.variant === 'destructive') {
+          const current = workflowPhaseContext?.currentPhase;
+          if (
+            current &&
+            (current.mode === 'build' || current.mode === 'result')
+          ) {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('phase-failure', {
+                  detail: {
+                    phaseId: current.id,
+                    message: options.title,
+                  },
+                }),
+              );
+            } catch {
+              // window may be unavailable in some environments; the toast
+              // alone still surfaces the error and we don't want to break
+              // the tool callback over the optional retry affordance.
+            }
+          }
+        }
       },
       // Custom component event callbacks
       onComponentEvent: (event) => {
@@ -182,6 +256,129 @@ export function useHandleServerEvent({
         // Optionally log state changes without notifying agent
         // (Agent will be notified via onComponentEvent for important events)
       },
+      // Workflow-phase capabilities. These flip on only when a
+      // WorkflowPhaseProvider is mounted around this hook (PlayPageInner does).
+      // Each capability defers to the provider for navigation; the agent tool
+      // never mutates the server directly from the realtime path.
+      ...(workflowPhaseContext
+        ? {
+            getWorkflowPhases: () => workflowPhaseContext.phases,
+            getWorkflowPhaseState: () => ({
+              currentPhase: workflowPhaseContext.currentPhase?.id,
+              furthestPhase: workflowPhaseContext.furthestPhase?.id,
+              visited: workflowPhaseContext.visited,
+              completedPhases: workflowPhaseContext.completedPhases,
+              completedObjectives: workflowPhaseContext.completedObjectives,
+              nextPhaseOverride: workflowPhaseContext.nextPhaseOverride,
+              snapshots: {},
+            }),
+            getCurrentWorkflowPhase: () => {
+              const current = workflowPhaseContext.currentPhase;
+              if (!current) return null;
+              const idx = workflowPhaseContext.phases.findIndex(
+                (p) => p.id === current.id,
+              );
+              return {
+                id: current.id,
+                title: current.title,
+                index: idx,
+                total: workflowPhaseContext.phases.length,
+                isCompleted: workflowPhaseContext.completedPhases.includes(
+                  current.id,
+                ),
+                nextPhaseOverride: workflowPhaseContext.nextPhaseOverride,
+                resolvedNextPhaseId: workflowPhaseContext.resolvedNextPhaseId,
+              };
+            },
+            setWorkflowPhase: async (op, _meta) => {
+              // Every op delegates to the provider so the response is applied
+              // to local state (completedPhases, nextPhaseOverride,
+              // experienceCompleted). Bypassing the provider — which the
+              // pre-A14 implementation did for everything except `advance` —
+              // leaves the strip's Next button stuck because its gating reads
+              // from the provider's state.
+              try {
+                switch (op.kind) {
+                  case 'advance': {
+                    await workflowPhaseContext.advance({ trigger: 'agent' });
+                    return {
+                      result: true,
+                      currentPhase: workflowPhaseContext.currentPhase?.id,
+                    };
+                  }
+                  case 'complete': {
+                    const r = await workflowPhaseContext.complete();
+                    return r.ok
+                      ? { result: true, currentPhase: r.currentPhase }
+                      : { result: false, message: r.message };
+                  }
+                  case 'nextPhase': {
+                    const r = await workflowPhaseContext.nextPhase();
+                    return r.ok
+                      ? { result: true, currentPhase: r.currentPhase }
+                      : { result: false, message: r.message };
+                  }
+                  case 'set': {
+                    const r = await workflowPhaseContext.setPhase(op.targetPhase);
+                    return r.ok
+                      ? { result: true, currentPhase: r.currentPhase }
+                      : { result: false, message: r.message };
+                  }
+                  case 'setNext': {
+                    const r = await workflowPhaseContext.setNext(op.targetPhase);
+                    return r.ok
+                      ? { result: true, nextPhaseOverride: r.nextPhaseOverride }
+                      : { result: false, message: r.message };
+                  }
+                  case 'markObjective': {
+                    const r = await workflowPhaseContext.markObjective(
+                      op.id,
+                      op.note ? { note: op.note } : undefined,
+                    );
+                    return r.ok
+                      ? { result: true, currentPhase: r.currentPhase }
+                      : { result: false, message: r.message };
+                  }
+                  default:
+                    // Other ops (`init`, `goTo`, `finishExperience`, `rewind`)
+                    // are not part of the agent tool's surface — they belong
+                    // to the user/system path. Reject explicitly so a stray
+                    // call surfaces during testing.
+                    return {
+                      result: false,
+                      message: `Unsupported transition op for setWorkflowPhase: ${(op as { kind: string }).kind}`,
+                    };
+                }
+              } catch (e) {
+                return {
+                  result: false,
+                  message:
+                    e instanceof Error ? e.message : 'transition request failed',
+                };
+              }
+            },
+            suggestWorkflowPhaseReturn: (phaseId: string, reason: string) => {
+              if (typeof window === 'undefined') return;
+              window.dispatchEvent(
+                new CustomEvent('workflow-phase-suggest-return', {
+                  detail: { phaseId, reason },
+                }),
+              );
+            },
+            // `finishExperience` delegates to the provider so the closing
+            // dialog appears immediately (driven by `experienceCompleted` in
+            // the provider state). The manager handles idempotency: if the
+            // flag is already set the second call is a no-op on the server.
+            finishExperience: async (reason?: string) => {
+              try {
+                const r = await workflowPhaseContext.finishExperience(reason);
+                return { result: r.ok };
+              } catch {
+                return { result: false };
+              }
+            },
+          }
+        : {}),
     };
 
     // Create breadcrumb ID for tracking
@@ -199,6 +396,18 @@ export function useHandleServerEvent({
         }
         
         const result = await toolRegistry.execute(function_request.name, args, toolContext) as ToolResponse;
+
+        // After a successful agent.delegate call, the backend agent may have
+        // executed workflowPhase transitions that bypassed the provider's
+        // mutation callbacks. Re-fetch the canonical server state so the
+        // strip's Next button reflects any completedPhases updates.
+        if (
+          result.status === 'success' &&
+          function_request.name === 'agent' &&
+          args?.action === 'delegate'
+        ) {
+          void workflowPhaseContext?.refetchState();
+        }
 
         switch (result.status) {
           case 'deferred':
@@ -221,7 +430,21 @@ export function useHandleServerEvent({
               );
               updateTranscriptItemStatus(breadcrumbId, "DONE");
             }
-            
+
+            // Tool errors are always surfaced in the chat stream — previously
+            // they were only visible when debug mode was on, which made
+            // "agent says something weird" bugs impossible to diagnose in
+            // normal use.
+            addTranscriptToolError(
+              function_request.name,
+              result.message ?? 'Tool returned error',
+              {
+                args,
+                data: result.data,
+                call_id: function_request.call_id,
+              }
+            );
+
             sendClientEvent({
               type: "conversation.item.create",
               item: {
@@ -303,6 +526,14 @@ export function useHandleServerEvent({
         updateTranscriptItemStatus(breadcrumbId, "DONE");
       }
 
+      // See the matching block in the 'error' case above — thrown exceptions
+      // also need to surface so the user sees why the agent stalled.
+      addTranscriptToolError(
+        function_request.name,
+        error instanceof Error ? error.message : 'Unknown error',
+        { args, call_id: function_request.call_id }
+      );
+
       sendClientEvent({
         type: "conversation.item.create",
         item: {
@@ -322,10 +553,6 @@ export function useHandleServerEvent({
 
     if (!serverEvent.delta && serverEvent.type.startsWith("output_audio_buffer")) {
       setIsAIAudioPlaying(serverEvent.type === "output_audio_buffer.started");
-    }
-    
-    if (serverEvent.type.startsWith("input_audio_buffer.speech_")) {
-      setIsUserAudioPlaying(serverEvent.type === "input_audio_buffer.speech_started");
     }
 
     switch (serverEvent.type) {
@@ -459,6 +686,18 @@ export function useHandleServerEvent({
         break;
       }
 
+      case "conversation.item.input_audio_transcription.completed": {
+        const itemId = serverEvent.item_id;
+        const finalTranscript =
+          !serverEvent.transcript || serverEvent.transcript === "\n"
+            ? "[inaudible]"
+            : serverEvent.transcript;
+        if (itemId) {
+          updateTranscriptMessage(itemId, finalTranscript, false);
+        }
+        break;
+      }
+
       // GA Realtime API: emitted when a conversation item is finalized. The
       // event includes the full content of the item (transcript for audio,
       // text for text). This is a defensive catch-all for both user and
@@ -487,18 +726,6 @@ export function useHandleServerEvent({
           updateTranscriptMessage(itemId, finalText, false);
         }
         updateTranscriptItemStatus(itemId, "DONE");
-        break;
-      }
-
-      case "conversation.item.input_audio_transcription.completed": {
-        const itemId = serverEvent.item_id;
-        const finalTranscript =
-          !serverEvent.transcript || serverEvent.transcript === "\n"
-            ? "[inaudible]"
-            : serverEvent.transcript;
-        if (itemId) {
-          updateTranscriptMessage(itemId, finalTranscript, false);
-        }
         break;
       }
 
@@ -669,56 +896,126 @@ export function useHandleServerEvent({
       }
 
       case "toast.show": {
-        // Handle toast notifications from backend
+        // Handle toast notifications from backend.
+        //
+        // Mirror the destructive→`phase-failure` dispatch from the inline
+        // `toast` callback above so backend-emitted destructive toasts
+        // (e.g. the Track D delegation circuit breaker) actually surface
+        // a Retry/Reload tile in build & result phases. Without this the
+        // user sees a transient toast on a non-interactive surface and
+        // gets stuck.
         const { message, type = 'default' } = (serverEvent as { data?: { message?: string; type?: string } }).data || {};
-        if (message) {
-          toast({
-            title: message,
-            variant: type === 'destructive' ? 'destructive' : 'default',
-          });
+        if (!message) break;
+        toast({
+          title: message,
+          variant: type === 'destructive' ? 'destructive' : 'default',
+        });
+        if (type === 'destructive') {
+          const current = workflowPhaseContext?.currentPhase;
+          if (
+            current &&
+            (current.mode === 'build' || current.mode === 'result')
+          ) {
+            try {
+              window.dispatchEvent(
+                new CustomEvent('phase-failure', {
+                  detail: {
+                    phaseId: current.id,
+                    message,
+                  },
+                }),
+              );
+            } catch {
+              // window may be unavailable in some environments; the toast
+              // alone still surfaces the error and we don't want to break
+              // event handling over the optional retry affordance.
+            }
+          }
         }
         break;
       }
 
-      case "ui.element.show": {
-        const data = (serverEvent as any).data;
-        handleUIElementShow(data);
-        break;
-      }
-
-      case "ui.element.hide": {
-        const data = (serverEvent as any).data;
-        handleUIElementHide(data);
-        break;
-      }
-
-      case "ui.element.move": {
-        const data = (serverEvent as any).data;
-        handleUIElementMove(data);
-        break;
-      }
-
-      case "ui.element.resize": {
-        const data = (serverEvent as any).data;
-        handleUIElementResize(data);
-        break;
-      }
-
-      case "ui.element.maximize": {
-        const data = (serverEvent as any).data;
-        handleUIElementMaximize(data);
-        break;
-      }
-
-      case "ui.element.destroy": {
-        const data = (serverEvent as any).data;
-        handleUIElementDestroy(data);
-        break;
-      }
-
       case "ui.observe.request": {
-        const data = (serverEvent as any).data;
-        handleUIObserveRequest(data);
+        const data = (serverEvent as any).data as { callId: string };
+        const socket = getGlobalSocket();
+        if (!socket) break;
+        // New simplified return shape per docs/superpowers/specs/
+        // 2026-04-15-panel-layout-and-tool-redesign.md §5.3. No viewport
+        // coords, no spatial analysis — the AI reasons about layout mode,
+        // what's in the document slot + library, notes, scene, and who
+        // the user is currently talking to.
+        const notesList = (async () => {
+          try {
+            const { getNotesManager } = await import('@/app/lib/tools/ui/notes/NotesManager');
+            const notes = getNotesManager().getVisibleNotes();
+            return notes.map((n: any) => ({
+              id: n.id,
+              title: n.title || n.content?.split('\n')[0]?.slice(0, 60) || '(untitled)',
+              color: n.color,
+            }));
+          } catch {
+            return [] as Array<{ id: string; title: string; color: string }>;
+          }
+        })();
+        notesList.then((notes) => {
+          const availableScenes = getSceneManager().getAvailableScenes?.() ?? [];
+          // Enrich document summaries with the user's current viewing
+          // state so the agent knows which version they're looking at
+          // (focusedRev) and what the latest is (currentRev). The agent
+          // can then call `artifact.get(rev?)` with the right rev to
+          // explain the exact content the user sees, even when they're
+          // browsing history. Non-document items (diagrams, components)
+          // skip these fields — there's no revision system there.
+          const summarise = (c: any) => {
+            if (!c) return null;
+            const base = {
+              id: c.id,
+              name: c.kind === 'component' ? 'Component' : c.name,
+              kind: c.kind,
+            };
+            if (c.kind !== 'document') return base;
+            const artifactKey = c.artifactId ?? c.id;
+            const artifact = artifacts.find((a) => a.id === artifactKey);
+            const currentRev = artifact?.currentRev ?? 1;
+            const focusedRev = viewState[artifactKey]?.focusedRev ?? currentRev;
+            return { ...base, currentRev, focusedRev };
+          };
+          socket.emit('tool.result', {
+            callId: data.callId,
+            status: 'success',
+            data: {
+              layout: {
+                arrangement: getWorkspaceLayout(),
+                sceneVisible: isSceneVisible,
+                documentVisible: isDocumentVisible,
+                chatVisible: true,
+              },
+              activeDocument: summarise(activeContent),
+              viewedDocument: summarise(viewedContent),
+              library: library.map(summarise).filter(Boolean),
+              notes: { count: notes.length, items: notes },
+              scene: {
+                current: currentScene,
+                visible: isSceneVisible,
+                available: availableScenes,
+              },
+              currentTab: documentTab,
+              conversation: {
+                currentAgent:
+                  selectedAgentKey && agents[selectedAgentKey]
+                    ? { key: selectedAgentKey, name: agents[selectedAgentKey].name }
+                    : null,
+                // queuedAgentTransfer is in the hook's closure via the outer
+                // setQueuedAgentTransfer plumbing — but we don't have a live
+                // read here. The AI can still infer "mid-handoff" from
+                // queue state via the agent tool; we surface the bit we
+                // have (reconnecting) for completeness.
+                pendingAgent: null,
+                isReconnecting: false,
+              },
+            },
+          });
+        });
         break;
       }
 
@@ -733,25 +1030,25 @@ export function useHandleServerEvent({
           }
 
           try {
-            // Import slide manager utilities
-            const { setSlideComponent } = await import('@/app/lib/tools/ui/slides/SlideManager');
-            const { generateUUID } = await import('@/app/lib/uuid');
-            const React = await import('react');
-            const { SlideComponent } = await import('@/app/lib/tools/ui/slides/SlideComponent');
-            
-            // Generate unique slide ID
+            // Generate unique slide ID (shared between both render paths)
             const slideId = `slide-${generateUUID()}`;
-            
-            // Create the slide component
-            const component = React.createElement(SlideComponent, {
+
+            // Both `show` and `showArtifact` slides render in the split-panel
+            // DocumentPanel instead of a floating window. Per docs/superpowers
+            // (UX rec #6 and figma-screens §4–5): one piece of content at a
+            // time, in the right pane.
+            showContent({
+              kind: 'document',
               id: slideId,
-              title: data.title,
-              content: data.content
+              name: data.artifactName || data.title,
+              content: data.content,
+              ...(data.artifactId && {
+                artifactId: data.artifactId,
+                type: data.artifactType || 'text/markdown',
+              }),
             });
-            
-            // Register the slide component (will auto-register with UIElementManager on mount)
-            setSlideComponent(slideId, component);
-            
+            setDocumentVisible(true);
+
             // Send success response back to backend with slideId
             // Use socket.emit directly to avoid wrapping in client:message
             socket.emit('tool.result', {
@@ -768,8 +1065,8 @@ export function useHandleServerEvent({
                 })
               }
             });
-            
-            logger.debug({ slideId, title: data.title }, 'Slide created successfully');
+
+            logger.debug({ slideId, title: data.title }, 'Slide created and routed to DocumentPanel');
           } catch (error) {
             logger.error(error, 'Error creating slide');
             socket.emit('tool.result', {
@@ -781,6 +1078,64 @@ export function useHandleServerEvent({
             });
           }
         })();
+        break;
+      }
+
+      case "ui.document.visibility": {
+        const data = (serverEvent as any).data as { callId: string; visible: boolean };
+        const socket = getGlobalSocket();
+        if (!socket) break;
+        setDocumentVisible(data.visible);
+        socket.emit('tool.result', {
+          callId: data.callId,
+          status: 'success',
+          data: { visible: data.visible },
+        });
+        break;
+      }
+
+      // ---- Document and component UI tool actions ----
+
+      case "ui.slide.list": {
+        const data = (serverEvent as any).data as { callId: string };
+        const socket = getGlobalSocket();
+        if (!socket) break;
+        const entries: Array<{ id: string; name: string; kind: string; active: boolean }> = [];
+        if (activeContent) {
+          entries.push({
+            id: activeContent.id,
+            name:
+              activeContent.kind === 'component' ? 'Component' : (activeContent as any).name,
+            kind: activeContent.kind,
+            active: true,
+          });
+        }
+        for (const item of library) {
+          entries.push({
+            id: item.id,
+            name: item.kind === 'component' ? 'Component' : (item as any).name,
+            kind: item.kind,
+            active: false,
+          });
+        }
+        socket.emit('tool.result', {
+          callId: data.callId,
+          status: 'success',
+          data: { count: entries.length, documents: entries },
+        });
+        break;
+      }
+
+      case "ui.slide.close": {
+        const data = (serverEvent as any).data as { callId: string; id: string };
+        const socket = getGlobalSocket();
+        if (!socket) break;
+        clearContent(data.id);
+        socket.emit('tool.result', {
+          callId: data.callId,
+          status: 'success',
+          data: { id: data.id },
+        });
         break;
       }
 
@@ -874,7 +1229,16 @@ export function useHandleServerEvent({
               onEvent,
               onStateChange
             );
-            
+
+            // Surface the component in the split-panel right pane. The
+            // DocumentPanel looks the instance up by id from ComponentManager.
+            showContent({
+              kind: 'component',
+              id: instanceId,
+              componentId: data.componentId,
+            });
+            setDocumentVisible(true);
+
             socket.emit('tool.result', {
               callId: data.callId,
               status: 'success',
@@ -884,8 +1248,8 @@ export function useHandleServerEvent({
                 message: `Component ${data.componentId} created successfully`
               }
             });
-            
-            logger.debug({ instanceId, componentId: data.componentId }, 'Component created successfully');
+
+            logger.debug({ instanceId, componentId: data.componentId }, 'Component created and routed to DocumentPanel');
           } catch (error) {
             logger.error(error, 'Error creating component');
             socket.emit('tool.result', {

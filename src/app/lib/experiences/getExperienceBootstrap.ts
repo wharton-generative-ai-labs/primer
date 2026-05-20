@@ -96,6 +96,10 @@ export async function getExperienceBootstrap(
   const hasCustomComponentPlugin = Array.isArray(tools.plugins)
     ? tools.plugins.includes('@primer/custom-component-plugin')
     : false;
+  // Meta-experiences that create components at runtime declare this on the
+  // experience config so the bootstrap still warms up the component runtime
+  // even when no components are pre-defined.
+  const usesComponents = (config as { usesComponents?: unknown }).usesComponents === true;
 
   // Drop the inlined payload past the cap; PlayClient falls back to the
   // network seed (preserves correctness, just no zero-RTT win).
@@ -115,7 +119,7 @@ export async function getExperienceBootstrap(
     bootstrap: {
       title: typeof config.title === 'string' ? config.title : experienceId,
       kind: typeof config.kind === 'string' ? config.kind : undefined,
-      hasComponents: hasExistingComponents || hasCustomComponentPlugin,
+      hasComponents: hasExistingComponents || hasCustomComponentPlugin || usesComponents,
       hasReadme: readmeExists,
       configText: inlinedConfigText,
     },

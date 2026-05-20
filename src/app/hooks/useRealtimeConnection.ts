@@ -10,6 +10,7 @@
 
 import { useRef, useCallback } from 'react';
 import { createRealtimeConnection } from '../lib/realtimeConnection';
+import { sanitizeVoice } from '../lib/voices';
 import { SessionStatus, AgentConfig } from '../lib/types';
 import { createModuleLogger } from '@/lib/logger';
 
@@ -69,7 +70,7 @@ export function useRealtimeConnection({
       body: JSON.stringify({
         model: selectedConfig?.model,
         modalities: selectedConfig?.modalities,
-        voice: currentAgent?.voice || "ballad",
+        voice: sanitizeVoice(currentAgent?.voice),
         ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
       })
     });

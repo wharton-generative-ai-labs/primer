@@ -1,12 +1,19 @@
 'use client'
 
 import Image from 'next/image'
-import { signOut, useSession } from "next-auth/react";
-import packageJson from '../../../package.json';
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { motion, useMotionValue, useTransform, animate } from "framer-motion";
-import { Button } from "@/components/ui/button"
-import { HEADER_CLASSES, FOOTER_CLASSES } from "@/config/layout"
+import { Footer, type FooterType } from "./Footer"
+import { Header } from "./Header"
+import { SceneContext } from "@/app/contexts/SceneContext";
+
+interface SceneLayer {
+  key: number;
+  src: string;
+  opacity: number;
+}
+
+const SCENE_FADE_MS = 500;
 
 interface PrimerBackgroundProps {
   children?: React.ReactNode;
@@ -21,6 +28,18 @@ interface PrimerBackgroundProps {
   triggerTransition?: boolean;
   // Current loading phase (optional, used to delay animation start)
   loadingPhase?: string | null;
+  /** Footer variant. Catalog routes use the route-derived value from `CatalogShell`; everywhere else passes its own. */
+  footerType?: FooterType;
+  /** Used by `builder` / `lesson` footers (route-based variants navigate via `<Link />` internally). */
+  onFooterBack?: () => void;
+  runningSubject?: string;
+  onInfo?: () => void;
+  onBug?: () => void;
+  bugActive?: boolean;
+  onTranscript?: () => void;
+  transcriptActive?: boolean;
+  onEvents?: () => void;
+  eventsActive?: boolean;
 }
 
 export default function PrimerBackground({ 
@@ -30,9 +49,18 @@ export default function PrimerBackground({
   showOverlays = true,
   useInitialBackdrop = false,
   triggerTransition = false,
-  loadingPhase = null
+  loadingPhase = null,
+  footerType = 'home',
+  onFooterBack,
+  runningSubject,
+  onInfo,
+  onBug,
+  bugActive,
+  onTranscript,
+  transcriptActive,
+  onEvents,
+  eventsActive,
 }: PrimerBackgroundProps) {
-  const { data: session } = useSession();
   const [startAnimation, setStartAnimation] = useState(false);
   
   // Motion value for the reveal radius (0 = hidden, 150 = fully revealed)
@@ -66,39 +94,71 @@ export default function PrimerBackground({
     }
   }, [startAnimation, useInitialBackdrop, revealRadius]);
 
+  // Scene-layer state. When `SceneContext` provides a current scene we render
+  // the scene image on top of the static backdrop and crossfade between scenes
+  // by stacking two layers. When no scene is available (or the context is
+  // absent), the static `primer_backdrop.png` below remains the visible
+  // background — that's the fallback path.
+  const sceneCtx = useContext(SceneContext);
+  const nextSceneKeyRef = useRef(0);
+  const [sceneLayers, setSceneLayers] = useState<SceneLayer[]>([]);
+  const sceneLayersRef = useRef(sceneLayers);
+  sceneLayersRef.current = sceneLayers;
+
+  const currentScene = sceneCtx?.currentScene ?? null;
+  const isSceneVisible = sceneCtx?.isSceneVisible ?? false;
+  const getScenePath = sceneCtx?.getScenePath;
+
+  useEffect(() => {
+    if (loadingPhase === 'loading') return;
+    if (!currentScene || !getScenePath) return;
+
+    const src = getScenePath(currentScene);
+    const key = nextSceneKeyRef.current++;
+
+    setSceneLayers((prev) => {
+      const top = prev[prev.length - 1];
+      if (top && top.src === src) return prev;
+
+      const incoming: SceneLayer = { key, src, opacity: 0 };
+      const trimmed = prev.length > 0 ? [prev[prev.length - 1]] : [];
+      return [...trimmed, incoming];
+    });
+  }, [currentScene, getScenePath, loadingPhase]);
+
+  const topSceneKey = sceneLayers.length > 0 ? sceneLayers[sceneLayers.length - 1].key : null;
+  const topSceneOpacity = sceneLayers.length > 0 ? sceneLayers[sceneLayers.length - 1].opacity : 0;
+
+  useEffect(() => {
+    if (topSceneKey === null) return;
+    if (topSceneOpacity === 1) return;
+
+    const outgoingKeys = sceneLayersRef.current.slice(0, -1).map((l) => l.key);
+
+    const raf = requestAnimationFrame(() => {
+      setSceneLayers((prev) =>
+        prev.map((l) => (l.key === topSceneKey ? { ...l, opacity: 1 } : l)),
+      );
+    });
+    const drop = setTimeout(() => {
+      setSceneLayers((prev) => prev.filter((l) => !outgoingKeys.includes(l.key)));
+    }, SCENE_FADE_MS);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      clearTimeout(drop);
+    };
+  }, [topSceneKey]);
+
+  const showSceneLayers =
+    loadingPhase !== 'loading' &&
+    sceneCtx !== null &&
+    currentScene !== null &&
+    sceneLayers.length > 0;
+
   return (
-    <div className="text-base flex flex-col h-screen text-white relative">
-      {showOverlays && (
-        <div className={`${HEADER_CLASSES} z-chrome`}>
-          <div className="flex items-center w-full h-full">
-            {/* Left - Logo */}
-            <div className="flex-shrink-0 absolute left-1.5 md:left-2">
-              <Image
-                src="/images/gail_logo_vert_rev.png"
-                alt="Wharton Generative AI Labs"
-                width={1}
-                height={1}
-                sizes="250px"
-                className="w-[60px] md:w-[80px] h-auto"
-                placeholder="empty"
-              />
-            </div>
-
-            {/* Center - Title and Version */}
-            <div className="flex-1 flex justify-center items-center">
-              <div className="flex flex-col items-center">
-                <h1 className="text-base md:text-2xl font-minion">Primer</h1>
-                <span className="text-xs text-gray-300">{packageJson.version}</span>
-              </div>
-            </div>
-
-            {/* Right - Empty space for balance */}
-            <div className="text-xs text-white/50 absolute right-1.5 md:right-2 invisible">
-              {/* Maintains layout balance */}
-            </div>
-          </div>
-        </div>
-      )}
+    <div className="flex h-[100dvh] flex-col text-base">
+      {showOverlays && <Header />}
 
       {darkOverlay && (
         <style jsx>{`
@@ -112,88 +172,89 @@ export default function PrimerBackground({
           }
         `}</style>
       )}
-      <div className={`flex-1 bg-black ${!showOverlays ? 'h-full' : ''} ${darkOverlay ? 'background-container-desaturate' : ''}`}>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="relative w-full h-full">
-            {/* Initial backdrop - the paper book (static base layer) */}
-            {useInitialBackdrop && (
-              <div 
-                className="absolute inset-0"
-                style={{ zIndex: 1 }}
-              >
-                <Image
-                  src="/images/primer_backdrop_initial.png"
-                  alt=""
-                  sizes="100vw"
-                  placeholder="empty"
-                  fill
-                  priority
-                  className="object-cover"
-                />
-              </div>
-            )}
-            
-            {/* Main backdrop - the Primer comes alive (soft feathered circular reveal) */}
-            <motion.div 
-              className="absolute inset-0"
-              style={{ 
-                zIndex: 2,
-                WebkitMaskImage: maskImage,
-                maskImage: maskImage
-              }}
-            >
+
+      <div
+        className={`relative flex-1 min-h-0 bg-black pb-[68px] ${darkOverlay ? 'background-container-desaturate' : ''}`}
+      >
+        {/* Decorative backdrop layer — fills the area between header and footer,
+            sits behind the scrolling content, and ignores pointer events. */}
+        <div className="pointer-events-none absolute inset-0 z-0">
+          {useInitialBackdrop && (
+            <div className="absolute inset-0" style={{ zIndex: 1 }}>
               <Image
-                src="/images/primer_backdrop.png"
+                src="/images/primer_backdrop_initial.png"
                 alt=""
                 sizes="100vw"
                 placeholder="empty"
                 fill
-                priority={!useInitialBackdrop}
+                priority
                 className="object-cover"
               />
-            </motion.div>
-            
-            <div className={`relative z-content h-full ${className}`}>
-              {children}
             </div>
+          )}
+
+          <motion.div
+            className="absolute inset-0"
+            style={{
+              zIndex: 2,
+              WebkitMaskImage: maskImage,
+              maskImage: maskImage,
+            }}
+          >
+            <Image
+              src="/images/primer_backdrop.png"
+              alt=""
+              sizes="100vw"
+              placeholder="empty"
+              fill
+              priority={!useInitialBackdrop}
+              className="object-cover"
+            />
+          </motion.div>
+
+          {showSceneLayers && (
+            <div
+              className="absolute inset-0 select-none transition-opacity duration-500"
+              style={{ zIndex: 3, opacity: isSceneVisible ? 1 : 0 }}
+              aria-hidden="true"
+            >
+              {sceneLayers.map((layer) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={layer.key}
+                  src={layer.src}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover transition-opacity duration-500"
+                  style={{ opacity: layer.opacity }}
+                />
+              ))}
+            </div>
+          )}
+
+          <div className="absolute inset-0" style={{ zIndex: 4 }}>
+            <div className="h-full w-full bg-gradient-to-b from-background via-background/80 to-transparent" />
           </div>
         </div>
+
+        {/* Scrolling content viewport */}
+        <main className={`relative z-content h-full overflow-y-auto ${className}`}>
+          {children}
+        </main>
       </div>
 
       {showOverlays && (
-        <div className={`${FOOTER_CLASSES} relative z-chrome`}>
-          <div className="flex flex-row items-center justify-between gap-1.5 min-[460px]:gap-1">
-            {/* Left side - User info */}
-            <div className="flex-1">
-              {session && (
-                <div className="flex items-center ml-2">
-                  <span className="text-xs text-white/90">
-                    {session.user?.email}
-                  </span>
-                </div>
-              )}
-              {!session && (
-                <div className="h-[32px]"></div>
-              )}
-            </div>
-            
-            {/* Right side - Sign Out */}
-            <div className="flex items-center justify-end">
-              {session && (
-                <Button
-                  onClick={() => signOut({ callbackUrl: '/auth/signin' })}
-                  variant="customDestructive"
-                  size="sm"
-                >
-                  Sign Out
-                </Button>
-              )}
-              {!session && (
-                <div className="h-[32px]"></div>
-              )}
-            </div>
-          </div>
-        </div>
+        <Footer
+          type={footerType}
+          runningSubject={runningSubject}
+          onBack={onFooterBack}
+          onInfo={onInfo}
+          onBug={onBug}
+          bugActive={bugActive}
+          onTranscript={onTranscript}
+          transcriptActive={transcriptActive}
+          onEvents={onEvents}
+          eventsActive={eventsActive}
+        />
       )}
     </div>
   )
