@@ -2,10 +2,15 @@
 echo "Running tests..."
 npm test -- --passWithNoTests || exit 1
 
-# Run the build
-echo "Building..."
-npm run build || exit 1
+# Type-check the project. Replaces a full `next build` here — that step
+# was rebuilding `.next/` on every commit, fighting any running `bun dev`
+# for the build directory and adding ~25s per commit. Type errors are
+# the failure mode we actually want to catch at commit time; the
+# remaining build-only failures (Edge runtime, page collection) are
+# rare and gated by CI.
+echo "Type checking..."
+npx tsc --noEmit -p tsconfig.json || exit 1
 
-# If build succeeds, bump version and add to staged changes
+# If type-check succeeds, bump version and add to staged changes
 new_version=$(npm run bump-version --silent)
 git add package.json

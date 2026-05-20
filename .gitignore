@@ -76,3 +76,9 @@ plugins/*/node_modules/
 
 # ai context code reviews
 ai_context/code_reviews/
+
+# Harness session logs
+/runs/
+
+# Git worktrees
+/.worktrees/
