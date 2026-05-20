@@ -45,10 +45,10 @@ export function ReportViewerDialog({
         control scrolling ourselves: sticky header + scrollable body.
         The [&>button] selector targets the built-in Radix close button.
       */}
-      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col overflow-hidden bg-gray-900 border-white/20 text-white [&>button]:text-white">
+      <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col overflow-hidden">
         {/* Sticky header */}
         <DialogHeader className="flex-shrink-0 pr-20">
-          <DialogTitle className="text-white truncate">
+          <DialogTitle className="truncate">
             {viewingReport?.title}
           </DialogTitle>
         </DialogHeader>
@@ -57,7 +57,7 @@ export function ReportViewerDialog({
         {viewingReport && !isLoadingReport && (
           <button
             onClick={handleDownload}
-            className="absolute right-12 top-4 rounded-sm text-white/70 hover:text-white transition-opacity"
+            className="absolute right-12 top-4 rounded-sm text-muted-foreground hover:text-foreground transition-opacity"
             title="Download report"
           >
             <Download className="h-4 w-4" />
@@ -67,10 +67,10 @@ export function ReportViewerDialog({
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto min-h-0">
-          <div className="prose prose-invert prose-sm max-w-none">
+          <div className="prose dark:prose-invert prose-sm max-w-none">
             {isLoadingReport ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-white/60" />
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : viewingReport ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>

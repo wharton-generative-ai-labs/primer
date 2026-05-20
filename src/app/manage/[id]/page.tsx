@@ -224,9 +224,9 @@ export default function ManageClassesPage() {
   // Loading state
   if (isLoading && !experienceInfo) {
     return (
-      <PrimerBackground useInitialBackdrop={true}>
-        <div className="flex items-center justify-center h-full">
-          <div className="text-white">Loading...</div>
+      <PrimerBackground useInitialBackdrop footerType="modules">
+        <div className="flex h-full items-center justify-center">
+          <p className="text-foreground">Loading...</p>
         </div>
       </PrimerBackground>
     );
@@ -235,17 +235,17 @@ export default function ManageClassesPage() {
   // Error state
   if (error) {
     return (
-      <PrimerBackground useInitialBackdrop={true}>
-        <div className="flex items-center justify-center h-full">
-          <Card className="bg-black/50 backdrop-blur-lg border-red-500/50 max-w-md">
+      <PrimerBackground useInitialBackdrop footerType="modules">
+        <div className="flex h-full items-center justify-center px-4">
+          <Card className="w-full max-w-md">
             <CardHeader>
-              <CardTitle className="text-red-400">Access Denied</CardTitle>
-              <CardDescription className="text-white/70">{error}</CardDescription>
+              <CardTitle className="text-destructive">Access Denied</CardTitle>
+              <CardDescription>{error}</CardDescription>
             </CardHeader>
             <CardContent>
               <Button
                 onClick={() => window.location.href = '/'}
-                variant="custom"
+                variant="outline"
               >
                 Return Home
               </Button>
@@ -257,7 +257,7 @@ export default function ManageClassesPage() {
   }
 
   return (
-    <PrimerBackground showOverlays={false} useInitialBackdrop={true}>
+    <PrimerBackground useInitialBackdrop footerType="modules">
       <div className="flex flex-col h-full">
         <ManagePageHeader
           experienceId={experienceId}
@@ -268,7 +268,7 @@ export default function ManageClassesPage() {
         />
 
         {/* Main content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden px-4 max-w-7xl mx-auto w-full">
           {activeTab === 'classes' ? (
             <div className="h-full flex">
               <ClassList
@@ -277,7 +277,7 @@ export default function ManageClassesPage() {
                 onSelectClass={handleSelectClass}
               />
 
-              <div className="flex-1 overflow-y-auto bg-black/60 backdrop-blur-xl">
+              <div className="flex-1 overflow-y-auto bg-background/80 backdrop-blur">
                 {selectedClass ? (
                   <ClassDetails
                     selectedClass={selectedClass}
@@ -295,7 +295,7 @@ export default function ManageClassesPage() {
               </div>
             </div>
           ) : (
-            <div className="h-full overflow-y-auto bg-black/60 backdrop-blur-xl">
+            <div className="h-full overflow-y-auto bg-background/80 backdrop-blur">
               <AnalyticsPanel experienceId={experienceId} classes={classes} />
             </div>
           )}
@@ -322,6 +322,7 @@ export default function ManageClassesPage() {
       />
 
       <DeleteClassDialog
+        selectedClassName={selectedClass?.name}
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={handleDeleteClass}

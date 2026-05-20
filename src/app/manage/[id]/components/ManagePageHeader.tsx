@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Copy, Check, Plus, Users, BarChart3 } from "lucide-react";
+import { Copy, Check, Plus, Users, BarChart3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type ManageTab = 'classes' | 'analytics';
@@ -35,24 +35,15 @@ export function ManagePageHeader({
   };
 
   return (
-    <div className="backdrop-blur-lg bg-black/50 border-b border-white/10">
+    <div className="border-b border-border bg-card/80 backdrop-blur">
       <div className="p-4">
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
-            <Button
-              onClick={() => window.location.href = '/'}
-              variant="ghost"
-              size="sm"
-              className="text-white/70 hover:text-white"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
             <div>
-              <h1 className="text-xl font-semibold text-white">
+              <h1 className="font-serif text-xl font-semibold text-foreground">
                 Experience Management
               </h1>
-              <p className="text-sm text-white/60">
+              <p className="text-base leading-6 text-muted-foreground">
                 {experienceTitle}
               </p>
             </div>
@@ -60,23 +51,21 @@ export function ManagePageHeader({
           <div className="flex items-center gap-2">
             <Button
               onClick={handleCopyLink}
-              variant="custom"
-              size="sm"
+              variant="outline"
             >
               {copiedLink ? (
-                <Check className="h-4 w-4 mr-2" />
+                <Check className="size-5" />
               ) : (
-                <Copy className="h-4 w-4 mr-2" />
+                <Copy className="size-5" />
               )}
               {copiedLink ? 'Copied!' : 'Copy Play Link'}
             </Button>
             {activeTab === 'classes' && (
               <Button
                 onClick={onCreateClass}
-                variant="custom"
-                size="sm"
+                variant="outline"
               >
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="size-5" />
                 Create Class
               </Button>
             )}
@@ -91,8 +80,8 @@ export function ManagePageHeader({
             onClick={() => onTabChange('classes')}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
               activeTab === 'classes'
-                ? 'bg-black/30 text-white border-b-2 border-blue-500'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
+                ? 'bg-background text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             }`}
           >
             <Users className="h-4 w-4" />
@@ -102,8 +91,8 @@ export function ManagePageHeader({
             onClick={() => onTabChange('analytics')}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
               activeTab === 'analytics'
-                ? 'bg-black/30 text-white border-b-2 border-purple-500'
-                : 'text-white/60 hover:text-white hover:bg-white/5'
+                ? 'bg-background text-foreground border-b-2 border-primary'
+                : 'text-muted-foreground hover:text-foreground hover:bg-accent'
             }`}
           >
             <BarChart3 className="h-4 w-4" />

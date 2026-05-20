@@ -16,18 +16,18 @@ export function JobProgress({ activeJobs }: JobProgressProps) {
   }
 
   return (
-    <Card className="bg-black/30 backdrop-blur-lg border-blue-500/30">
+    <Card className="border-primary/30">
       <CardContent className="py-4">
         {runningJobs.map(job => (
           <div key={job.jobId} className="flex items-center gap-4">
-            <Loader2 className="h-5 w-5 animate-spin text-blue-400" />
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
             <div className="flex-1">
-              <p className="text-white">
+              <p className="text-foreground">
                 Running {job.type === 'student' ? 'student' : 'class'} analytics...
               </p>
               {job.progress && (
                 <div className="mt-2">
-                  <div className="flex justify-between text-sm text-white/60 mb-1">
+                  <div className="flex justify-between text-sm text-muted-foreground mb-1">
                     <span>
                       {job.progress.currentStudentEmail || 'Processing...'}
                     </span>
@@ -35,11 +35,11 @@ export function JobProgress({ activeJobs }: JobProgressProps) {
                       {job.progress.current} / {job.progress.total}
                     </span>
                   </div>
-                  <div className="h-2 bg-black/30 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full bg-blue-500 transition-all"
-                      style={{ 
-                        width: `${(job.progress.current / job.progress.total) * 100}%` 
+                  <div className="h-2 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary transition-all"
+                      style={{
+                        width: `${(job.progress.current / job.progress.total) * 100}%`
                       }}
                     />
                   </div>

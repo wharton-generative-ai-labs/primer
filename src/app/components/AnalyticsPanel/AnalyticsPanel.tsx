@@ -98,8 +98,8 @@ export function AnalyticsPanel({ experienceId, classes }: AnalyticsPanelProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Analytics</h2>
-          <p className="text-white/60">
+          <h2 className="font-serif text-2xl font-bold text-brand">Analytics</h2>
+          <p className="text-muted-foreground">
             Run AI-powered analytics on student and class performance
           </p>
         </div>

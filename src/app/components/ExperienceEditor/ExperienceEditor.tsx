@@ -219,7 +219,7 @@ export function ExperienceEditor({
   }, []);
 
   return (
-    <div className={`h-full w-full -mt-2 bg-black/50 backdrop-blur-sm flex overflow-hidden ${visible === false ? 'hidden' : ''}`}>
+    <div className={`h-full w-full -mt-2 bg-background flex overflow-hidden ${visible === false ? 'hidden' : ''}`}>
       {/* Left sidebar with resource tree */}
       <FileTreeSidebar
         fileTree={fileTree}
@@ -234,12 +234,12 @@ export function ExperienceEditor({
 
       {/* Resize handle */}
       <div
-        className="w-1 cursor-col-resize bg-transparent hover:bg-white/20 active:bg-white/30 transition-colors"
+        className="w-1 cursor-col-resize bg-transparent hover:bg-border active:bg-border/80 transition-colors"
         onMouseDown={startResizing}
       />
 
       {/* Editor pane */}
-      <div className="flex-1 flex flex-col bg-black/30 backdrop-blur-lg overflow-hidden">
+      <div className="flex-1 flex flex-col bg-background overflow-hidden">
         <EditorPane
           experienceId={experienceId}
           selectedPath={selectedPath}

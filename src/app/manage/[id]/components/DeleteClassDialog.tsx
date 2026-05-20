@@ -9,34 +9,40 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface DeleteClassDialogProps {
+  selectedClassName?: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }
 
 export function DeleteClassDialog({
+  selectedClassName,
   open,
   onOpenChange,
   onConfirm
 }: DeleteClassDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="bg-gray-900 border-white/20">
+      <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Delete Class</AlertDialogTitle>
+          <AlertDialogTitle>
+            Are you sure you want to delete the class &ldquo;{selectedClassName}&rdquo;?
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            Are you sure you want to delete this class? All members will lose access to the experience through this class. This action cannot be undone.
+            All members will lose access to the experience through this class. This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            className="bg-red-600 hover:bg-red-700"
+            className={cn(buttonVariants({ variant: "destructive" }))}
           >
-            Delete Class
+            Delete
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

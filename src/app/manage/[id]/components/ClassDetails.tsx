@@ -10,7 +10,6 @@ import {
 import {
   Trash2,
   UserPlus,
-  UserMinus,
   ToggleLeft,
   ToggleRight
 } from "lucide-react";
@@ -35,79 +34,73 @@ export function ClassDetails({
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-white">
+          <h2 className="font-serif text-2xl font-bold text-brand">
             {selectedClass.name}
           </h2>
           {selectedClass.description && (
-            <p className="text-white/60 mt-1">
+            <p className="text-muted-foreground mt-1">
               {selectedClass.description}
             </p>
           )}
-          <p className="text-sm text-white/40 mt-2">
+          <p className="text-sm text-muted-foreground mt-2">
             Created {new Date(selectedClass.createdAt).toLocaleDateString()}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button
             onClick={() => onToggleActive(selectedClass.id, selectedClass.isActive)}
-            variant="ghost"
-            size="sm"
-            className={selectedClass.isActive ? 'text-green-400' : 'text-yellow-400'}
+            variant="outline"
+            className={selectedClass.isActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}
           >
             {selectedClass.isActive ? (
-              <ToggleRight className="h-5 w-5 mr-2" />
+              <ToggleRight className="size-5" />
             ) : (
-              <ToggleLeft className="h-5 w-5 mr-2" />
+              <ToggleLeft className="size-5" />
             )}
             {selectedClass.isActive ? 'Active' : 'Inactive'}
           </Button>
           <Button
             onClick={() => onDelete(selectedClass.id)}
             variant="ghost"
-            size="sm"
-            className="text-red-400 hover:text-red-300"
+            className="text-rose-800 hover:text-rose-800 dark:text-rose-200 dark:hover:text-rose-200 hover:bg-rose-100 bg-background dark:hover:bg-rose-900"
           >
-            <Trash2 className="h-4 w-4" />
+            <Trash2 className="size-5" />
+            Delete
           </Button>
         </div>
       </div>
 
       {/* Members section */}
-      <Card className="bg-black/50 backdrop-blur-lg border-white/10">
+      <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle className="text-white">
+            <CardTitle className="text-lg font-semibold leading-7">
               Members ({selectedClass.members.length})
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-base leading-6">
               Students enrolled in this class can access the experience
             </CardDescription>
           </div>
           {selectedClass.members.length > 0 && (
             <Button
               onClick={onAddMembers}
-              variant="custom"
               size="sm"
-              className="bg-white/20 hover:bg-white/30 text-white border border-white/30"
             >
-              <UserPlus className="h-4 w-4 mr-2" />
+              <UserPlus className="size-5" />
               Add Members
             </Button>
           )}
         </CardHeader>
         <CardContent>
           {selectedClass.members.length === 0 ? (
-            <div className="text-center py-12 text-white/50">
+            <div className="text-center py-12 text-muted-foreground">
               <UserPlus className="h-16 w-16 mx-auto mb-4 opacity-50" />
-              <p className="text-lg mb-2">No members yet</p>
+              <p className="text-lg mb-2 text-foreground">No members yet</p>
               <p className="text-sm mb-6">Add student email addresses to give them access</p>
               <Button
                 onClick={onAddMembers}
-                variant="custom"
-                size="lg"
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-semibold px-8 py-3 shadow-lg"
               >
-                <UserPlus className="h-5 w-5 mr-2" />
+                <UserPlus className="size-5" />
                 Add Members
               </Button>
             </div>
@@ -116,21 +109,20 @@ export function ClassDetails({
               {selectedClass.members.map((member: ClassMember) => (
                 <div
                   key={member.email}
-                  className="flex items-center justify-between p-3 rounded-lg bg-black/30"
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted"
                 >
                   <div>
-                    <span className="text-white">{member.email}</span>
-                    <span className="text-white/40 text-sm ml-2">
+                    <span className="text-foreground">{member.email}</span>
+                    <span className="text-muted-foreground text-sm ml-2">
                       Added {new Date(member.addedAt).toLocaleDateString()}
                     </span>
                   </div>
                   <Button
                     onClick={() => onRemoveMember(member.email)}
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-400 hover:text-red-300"
+                    variant="outline"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive "
                   >
-                    <UserMinus className="h-4 w-4" />
+                    <Trash2 className="size-5" />
                   </Button>
                 </div>
               ))}

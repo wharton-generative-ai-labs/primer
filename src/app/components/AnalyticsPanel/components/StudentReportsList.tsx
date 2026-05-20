@@ -16,7 +16,7 @@ export function StudentReportsList({
 
   if (members.length === 0) {
     return (
-      <p className="text-white/50 text-sm py-4 text-center">
+      <p className="text-muted-foreground text-sm py-4 text-center">
         No sessions found for class members
       </p>
     );
@@ -31,54 +31,52 @@ export function StudentReportsList({
         );
         
         return (
-          <div 
+          <div
             key={email}
-            className="flex items-center justify-between p-3 rounded-lg bg-black/20"
+            className="flex items-center justify-between p-3 rounded-lg bg-muted"
           >
             <div className="flex items-center gap-3">
               {hasReport ? (
-                <CheckCircle2 className="h-4 w-4 text-green-400" />
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               ) : member.totalSessions > 0 ? (
-                <Clock className="h-4 w-4 text-yellow-400" />
+                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
               ) : (
-                <AlertCircle className="h-4 w-4 text-red-400" />
+                <AlertCircle className="h-4 w-4 text-destructive" />
               )}
               <div>
-                <p className="text-white text-sm">
+                <p className="text-foreground text-sm">
                   {member.name || email}
                 </p>
                 {member.name && (
-                  <p className="text-white/40 text-xs">{email}</p>
+                  <p className="text-muted-foreground text-xs">{email}</p>
                 )}
               </div>
             </div>
             <div className="flex items-center gap-2">
               {hasReport && latestSession && (
                 <>
-                  <span className="text-xs text-white/40">
+                  <span className="text-xs text-muted-foreground">
                     Generated{" "}
-                    {latestSession.analyticsGeneratedAt && 
+                    {latestSession.analyticsGeneratedAt &&
                       new Date(latestSession.analyticsGeneratedAt).toLocaleDateString()
                     }
                   </span>
                   <Button
                     onClick={() => onViewReport(latestSession.sessionId, email, member.name)}
-                    variant="ghost"
-                    size="sm"
-                    className="text-blue-400"
+                    variant="outline"
                   >
-                    <Eye className="h-4 w-4 mr-1" />
+                    <Eye className="size-5" />
                     View
                   </Button>
                 </>
               )}
               {!hasReport && member.totalSessions > 0 && (
-                <span className="text-xs text-yellow-400">
+                <span className="text-xs text-amber-600 dark:text-amber-400">
                   Pending analysis
                 </span>
               )}
               {member.totalSessions === 0 && (
-                <span className="text-xs text-red-400">
+                <span className="text-xs text-destructive">
                   No sessions
                 </span>
               )}

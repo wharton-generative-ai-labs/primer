@@ -27,9 +27,9 @@ export function AnalyticsResults({
   onViewClassReport
 }: AnalyticsResultsProps) {
   return (
-    <Card className="bg-black/30 backdrop-blur-lg border-white/10">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
           Analytics Results
         </CardTitle>
@@ -37,7 +37,7 @@ export function AnalyticsResults({
       <CardContent className="space-y-4">
         {/* Student Reports */}
         <div>
-          <h4 className="text-sm font-medium text-white/70 mb-2">
+          <h4 className="text-sm font-medium text-muted-foreground mb-2">
             Student Reports
           </h4>
           <StudentReportsList

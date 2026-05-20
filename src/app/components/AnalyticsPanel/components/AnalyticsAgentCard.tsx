@@ -16,16 +16,18 @@ export function AnalyticsAgentCard({
   isRunning
 }: AnalyticsAgentCardProps) {
   const isStudentAgent = agent.type === 'student';
-  const colorClass = isStudentAgent ? 'text-blue-400' : 'text-purple-400';
-  const description = isStudentAgent 
+  const colorClass = isStudentAgent
+    ? 'text-blue-600 dark:text-blue-400'
+    : 'text-purple-600 dark:text-purple-400';
+  const description = isStudentAgent
     ? 'Runs for each student individually'
     : 'Runs once to aggregate all student data';
 
   return (
-    <div className="flex items-center justify-between p-4 rounded-lg bg-black/20 border border-white/10">
+    <div className="flex items-center justify-between p-4 rounded-lg bg-muted border border-border">
       <div>
-        <h4 className="font-medium text-white">{agent.name}</h4>
-        <p className="text-sm text-white/60">{agent.description}</p>
+        <h4 className="font-medium text-foreground">{agent.name}</h4>
+        <p className="text-sm text-muted-foreground">{agent.description}</p>
         <p className={`text-xs ${colorClass} mt-1`}>
           {description}
         </p>
@@ -33,23 +35,20 @@ export function AnalyticsAgentCard({
       <div className="flex items-center gap-2">
         <Button
           onClick={() => window.location.href = `/edit/${experienceId}`}
-          variant="ghost"
           size="sm"
-          className="text-white/60"
         >
-          <Edit3 className="h-4 w-4 mr-1" />
+          <Edit3 className="size-5" />
           Edit Prompt
         </Button>
         <Button
           onClick={() => onRun(agent.key, agent.type)}
           disabled={disabled}
-          variant="custom"
           size="sm"
         >
           {isRunning ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            <Loader2 className="size-5 animate-spin mr-2" />
           ) : (
-            <Play className="h-4 w-4 mr-2" />
+            <Play className="size-5" />
           )}
           {isStudentAgent ? 'Run for All Students' : 'Run for Class'}
         </Button>

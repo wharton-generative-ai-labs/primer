@@ -34,7 +34,7 @@ export function CreateClassDialog({
 }: CreateClassDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="bg-gray-900 border-white/20">
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Create New Class</AlertDialogTitle>
           <AlertDialogDescription>

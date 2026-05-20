@@ -106,7 +106,7 @@ export function EditorPane({
                 variant={viewMode === 'code' ? 'customOutlineActive' : 'customOutline'}
                 size="sm"
               >
-                <Code size={16} />
+                <Code className="size-5" />
                 Code
               </Button>
               <Button
@@ -114,7 +114,7 @@ export function EditorPane({
                 variant={viewMode === 'inspect' ? 'customOutlineActive' : 'customOutline'}
                 size="sm"
               >
-                <FileSearch size={16} />
+                <FileSearch className="size-5" />
                 Inspect
               </Button>
             </>
@@ -126,7 +126,7 @@ export function EditorPane({
               variant={saveStatus === 'saved' ? 'customGreen' : saveStatus === 'error' ? 'customDestructive' : 'custom'}
               size="sm"
             >
-              <Save size={16} />
+              <Save className="size-5" />
               {saveStatus === 'saving' ? 'Saving...' :
                 saveStatus === 'saved' ? 'Saved!' :
                   saveStatus === 'error' ? 'Error' :
@@ -145,7 +145,7 @@ export function EditorPane({
           />
         ) : loading ? (
           <div className="flex items-center justify-center h-full">
-            <div className="text-white/70">Loading...</div>
+            <div className="text-foreground">Loading...</div>
           </div>
         ) : isText ? (
           <CodeMirrorWrapper

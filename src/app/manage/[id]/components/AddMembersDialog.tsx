@@ -29,7 +29,7 @@ export function AddMembersDialog({
 }: AddMembersDialogProps) {
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="bg-gray-900 border-white/20">
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Add Members</AlertDialogTitle>
           <AlertDialogDescription>

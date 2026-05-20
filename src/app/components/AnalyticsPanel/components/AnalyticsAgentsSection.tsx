@@ -35,9 +35,9 @@ export function AnalyticsAgentsSection({
   runningAgentKey
 }: AnalyticsAgentsSectionProps) {
   return (
-    <Card className="bg-black/30 backdrop-blur-lg border-white/10">
+    <Card>
       <CardHeader>
-        <CardTitle className="text-white flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2">
           <BarChart3 className="h-5 w-5" />
           Analytics Agents
         </CardTitle>

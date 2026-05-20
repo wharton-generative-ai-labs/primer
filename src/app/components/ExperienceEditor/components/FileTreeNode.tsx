@@ -55,11 +55,11 @@ export function FileTreeNode({
               style={{ paddingLeft: `${paddingLeft}px` }}
             >
               {node.isExpanded ? (
-                <ChevronDown className="h-4 w-4 text-white/50" />
+                <ChevronDown className="size-5 text-white/50" />
               ) : (
-                <ChevronRight className="h-4 w-4 text-white/50" />
+                <ChevronRight className="size-5 text-white/50" />
               )}
-              <Folder className="h-4 w-4" />
+              <Folder className="size-5" />
               <span className="truncate">{folderDisplayName}</span>
             </Button>
             {node.isExpanded && node.children.map(child => (
@@ -108,7 +108,7 @@ export function FileTreeNode({
           }`}
           style={{ paddingLeft: `${paddingLeft + 24}px` }}
         >
-          <File className="h-4 w-4" />
+          <File className="size-5" />
           <span className="truncate">{node.name}</span>
         </Button>
       </ContextMenuTrigger>

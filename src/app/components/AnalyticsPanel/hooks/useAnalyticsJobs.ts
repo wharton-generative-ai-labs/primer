@@ -169,7 +169,7 @@ export function useAnalyticsJobs(experienceId: string, onJobComplete?: () => voi
         });
       }
     },
-    [experienceId, isConnected, toast, onJobComplete, persistJob, runSingleAgent] // eslint-disable-line react-hooks/exhaustive-deps
+    [experienceId, isConnected, toast, onJobComplete, persistJob, runSingleAgent]  
   );
 
   // ── Student-level analytics ─────────────────────────────────────────
