@@ -1,0 +1,107 @@
+[project]
+docs_dir = "report"
+site_name = "Primer Code Audit"
+site_description = "Security audit for Primer - AI vs Human review research for Wharton"
+site_author = "Lincoln Loop / Wharton"
+copyright = "Copyright &copy; 2026 Lincoln Loop / Wharton"
+
+nav = [
+  { "Code Audit" = "index.md" },
+  { "Methodology" = [
+    { "index.md" = "methodology/index.md" },
+    { "Scope" = "methodology/scope.md" },
+    { "Deployment Context" = "methodology/deployment-context.md" }
+  ]},
+  { "Findings" = [
+    { "index.md" = "findings/index.md" },
+    { "01. Secrets" = "findings/secrets.md" },
+    { "02. Authentication" = "findings/authentication.md" },
+    { "03. WebSockets" = "findings/websockets.md" },
+    { "04. API Security" = "findings/api-security.md" },
+    { "05. Adapters" = "findings/adapters.md" },
+    { "06. Dependencies" = "findings/dependencies.md" },
+    { "07. Configuration" = "findings/configuration.md" },
+    { "08. Data Handling" = "findings/data-handling.md" },
+    { "09. Code Quality" = "findings/code-quality.md" },
+    { "10. Frontend Security" = "findings/frontend-security.md" },
+    { "11. Frontend Code Quality" = "findings/frontend-code-quality.md" }
+  ]},
+  { "Conclusions" = [
+    { "Remediation" = "remediation.md" },
+    { "Release Checklist" = "release-checklist.md" },
+    { "AI vs Human Analysis" = "ai-vs-human-analysis.md" },
+    { "Postmortem" = "postmortem.md" }
+  ]},
+  { "Appendices" = [
+    { "index.md" = "appendices/index.md" },
+    { "AI Reviews" = "appendices/ai-reviews/index.md" },
+    { "Human Reviews" = "appendices/human-reviews/index.md" },
+    { "Automated Scans" = "appendices/automated-scans/index.md" }
+  ]}
+]
+
+# Markdown extensions
+[project.markdown_extensions.nl2br]        # GitHub-style line breaks
+[project.markdown_extensions.admonition]   # Warning/note/tip boxes
+[project.markdown_extensions.abbr]         # Abbreviation tooltips
+[project.markdown_extensions.def_list]     # Definition lists
+
+[project.markdown_extensions.toc]
+permalink = true                           # Anchor links on headings
+
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+line_spans = "__span"
+pygments_lang_class = true
+
+[project.markdown_extensions.pymdownx.inlinehilite]
+
+[project.markdown_extensions.pymdownx.superfences]
+
+[project.markdown_extensions.pymdownx.details]   # Collapsible sections
+
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true                     # Styled checkboxes
+
+[project.markdown_extensions.pymdownx.snippets]
+auto_append = ["abbreviations.md"]   # Tooltip abbreviations on all pages
+
+[project.markdown_extensions.pymdownx.tilde]  # For strikethrough (~~text~~)
+
+[project.markdown_extensions.attr_list]  # For custom attributes on elements
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_index = "material.extensions.emoji.twemoji"
+emoji_generator = "material.extensions.emoji.to_svg"
+
+[project.theme]
+language = "en"
+features = [
+  "announce.dismiss",
+  "content.code.annotate",
+  "content.code.copy",
+  "content.code.select",
+  "content.footnote.tooltips",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.instant.prefetch",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+]
+
+# Light/dark mode toggle
+[[project.theme.palette]]
+scheme = "default"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+scheme = "slate"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to light mode"

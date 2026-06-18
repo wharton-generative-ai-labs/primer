@@ -1,0 +1,59 @@
+{
+  "name": "Primer",
+  "description": "Interactive AI experience platform combining voice, visuals, and autonomous decision-making",
+  "repository": "https://github.com/wharton-generative-ai-labs/runcible",
+  "logo": "https://raw.githubusercontent.com/wharton-generative-ai-labs/runcible/main/public/favicon.ico",
+  "keywords": ["ai", "education", "openai", "nextjs", "realtime"],
+  "stack": "heroku-24",
+  "buildpacks": [
+    {
+      "url": "heroku/nodejs"
+    }
+  ],
+  "env": {
+    "OPENAI_API_KEY": {
+      "description": "Your OpenAI API key (required). Get one at https://platform.openai.com/api-keys",
+      "required": true
+    },
+    "GOOGLE_CLIENT_ID": {
+      "description": "Google OAuth Client ID for authentication. Create at https://console.cloud.google.com/apis/credentials",
+      "required": true
+    },
+    "GOOGLE_CLIENT_SECRET": {
+      "description": "Google OAuth Client Secret",
+      "required": true
+    },
+    "NEXTAUTH_SECRET": {
+      "description": "Random secret for session encryption (auto-generated)",
+      "generator": "secret"
+    },
+    "NEXTAUTH_URL": {
+      "description": "Your app URL (e.g., https://your-app-name.herokuapp.com). Set this AFTER deployment - see README for instructions.",
+      "required": false
+    },
+    "ANTHROPIC_API_KEY": {
+      "description": "Anthropic API key (optional). Get one at https://console.anthropic.com/",
+      "required": false
+    },
+    "USER_ROLE_MAPPINGS": {
+      "description": "JSON mapping of email to roles, e.g. {\"you@example.com\":[\"ADMIN\"]}",
+      "required": false
+    },
+    "NODE_ENV": {
+      "value": "production"
+    },
+    "NPM_CONFIG_PRODUCTION": {
+      "description": "Keep devDependencies (tsx required at runtime)",
+      "value": "false"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "scripts": {
+    "postdeploy": "echo 'Primer deployed successfully!'"
+  }
+}

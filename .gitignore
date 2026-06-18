@@ -1,0 +1,84 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# public
+public/uploads/*
+
+# storage
+/storage
+
+# data
+/data/*
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+!.env.local.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+todo.md
+
+# user roles configuration
+src/config/user-roles.json
+
+# Build artifacts (global pattern)
+**/dist/
+**/build/
+
+# Package build artifacts
+packages/*/dist/
+packages/*/build/
+packages/*/node_modules/
+
+# Plugin build artifacts
+plugins/*/dist/
+plugins/*/build/
+plugins/*/node_modules/
+
+# workspace dependencies
+**/node_modules/
+# Note: package-lock.json should be committed for dependency integrity
+# **/package-lock.json
+**/.package-lock.json
+
+# ai context code reviews
+ai_context/code_reviews/
+
+# Harness session logs
+/runs/
+
+# Git worktrees
+/.worktrees/
