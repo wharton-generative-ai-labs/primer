@@ -2,9 +2,11 @@
  * Phase loader + validator for experience-config workflow phases.
  *
  * `loadWorkflowPhases` returns the ordered phase list when the config declares
- * one, throwing on duplicate ids, an unknown `initialWorkflowPhase`, or any
- * phase that names an `initialAgent`/`reentryAgent` not present in
- * `config.agents`. Experiences without `workflowPhases` (or with an empty
+ * one, throwing on duplicate ids, an unknown `initialWorkflowPhase`, any phase
+ * that names an `initialAgent`/`reentryAgent`/`allowedDelegates` entry not
+ * present in `config.agents`, or a frontend phase-anchor agent that has been
+ * stripped of the tools (`workflowPhase`, `finishExperience`) needed to drive
+ * phase navigation. Experiences without `workflowPhases` (or with an empty
  * list) get back `[]`, signalling single-screen mode.
  *
  * `resolveInitialWorkflowPhase` picks the starting phase id, preferring the
@@ -13,9 +15,59 @@
  */
 
 import type { ExperienceConfig } from '@/app/lib/types';
+import { resolveAgentToolNames } from '@/app/lib/tools/groups';
 
 import { InvalidPhaseError } from './errors';
 import type { WorkflowPhaseConfig } from './types';
+
+/**
+ * Tools a phase-anchor agent MUST be able to call to drive the phase
+ * lifecycle: `workflowPhase` advances/marks phases, `finishExperience`
+ * completes the final phase. An anchor without these strands the learner
+ * in a phase they can never leave.
+ */
+const REQUIRED_PHASE_ANCHOR_TOOLS = ['workflowPhase', 'finishExperience'] as const;
+
+/**
+ * Throw when a frontend phase-anchor agent (the one a learner lands on) has
+ * been stripped of a tool it needs to drive phase navigation. Exempt:
+ * `undefined` anchors, backend agents (they never anchor an interactive
+ * phase), and agents with no explicit tool restriction (they inherit the full
+ * registry).
+ *
+ * Tool resolution defers to the shared {@link resolveAgentToolNames} so this
+ * validator and the runtime config loader agree, including on legacy
+ * `toolGroups`. A resolution failure (e.g. an unknown toolSet) is treated as
+ * "unrestricted" here so it surfaces through the config loader's own error
+ * path rather than as a phase-load crash.
+ */
+function assertAnchorAgentCanNavigate(
+  phaseId: string,
+  anchorKey: string | undefined,
+  config: ExperienceConfig,
+): void {
+  if (anchorKey === undefined) return;
+  const agent = config.agents?.[anchorKey];
+  if (!agent || agent.type === 'backend') return;
+
+  let toolNames: string[] | undefined;
+  try {
+    toolNames = resolveAgentToolNames(agent, config);
+  } catch {
+    return;
+  }
+  if (toolNames === undefined) return;
+  const resolvedTools = toolNames;
+
+  const missingTool = REQUIRED_PHASE_ANCHOR_TOOLS.find(
+    (tool) => !resolvedTools.includes(tool),
+  );
+  if (missingTool) {
+    throw new InvalidPhaseError(
+      `Workflow phase "${phaseId}" anchor agent "${anchorKey}" is missing the "${missingTool}" tool required to drive phase navigation. Add it to the agent's toolSets or availableTools.`,
+    );
+  }
+}
 
 /**
  * Validate and return the ordered workflow-phase list for an experience.
@@ -79,6 +131,23 @@ export function loadWorkflowPhases(
         `Workflow phase "${phase.id}" references unknown reentryAgent "${phase.reentryAgent}".`,
       );
     }
+
+    // allowedDelegates is an allowlist of agent keys; every entry must name a
+    // declared agent or the phase would silently refuse a delegate the author
+    // believed was permitted.
+    if (phase.allowedDelegates) {
+      for (const delegateKey of phase.allowedDelegates) {
+        if (!agentKeys.has(delegateKey)) {
+          throw new InvalidPhaseError(
+            `Workflow phase "${phase.id}" allowedDelegates references unknown agent "${delegateKey}".`,
+          );
+        }
+      }
+    }
+
+    // A phase-anchor agent must keep the tools that drive phase navigation.
+    assertAnchorAgentCanNavigate(phase.id, phase.initialAgent, config);
+    assertAnchorAgentCanNavigate(phase.id, phase.reentryAgent, config);
 
     if (phase.objectives) {
       for (const objective of phase.objectives) {
