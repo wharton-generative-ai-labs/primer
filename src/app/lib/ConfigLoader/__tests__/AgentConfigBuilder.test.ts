@@ -10,23 +10,36 @@ import { ExperienceConfig } from '../../types';
 jest.mock('../InstructionProcessor');
 
 // Mock the groups module
-jest.mock('../../tools/groups', () => ({
-  expandToolSets: jest.fn((toolSetNames: string[], customToolSets?: Record<string, string[]>) => {
+jest.mock('../../tools/groups', () => {
+  const expandToolSets = jest.fn((toolSetNames: string[], customToolSets?: Record<string, string[]>) => {
     // Simple mock implementation
     if (customToolSets) {
       const tools = toolSetNames.flatMap(name => customToolSets[name] || []);
       return [...new Set(tools)];
     }
     return [];
-  }),
-  getToolNamesForGroup: jest.fn((groupName: string) => {
+  });
+  const getToolNamesForGroup = jest.fn((groupName: string) => {
     const mockGroups: Record<string, string[]> = {
       'builtin': ['scene', 'information', 'file'],
       'celebrate': ['celebrate']
     };
     return mockGroups[groupName] || [];
-  })
-}));
+  });
+  // Mirror the real resolution precedence (availableTools -> toolSets ->
+  // toolGroups -> undefined) using the mocked expanders above.
+  const resolveAgentToolNames = jest.fn((agentData: any, experienceConfig: any) => {
+    if (agentData.availableTools) return agentData.availableTools;
+    if (agentData.toolSets && agentData.toolSets.length > 0) {
+      return expandToolSets(agentData.toolSets, experienceConfig.toolSets);
+    }
+    if (agentData.toolGroups && agentData.toolGroups.length > 0) {
+      return [...new Set(agentData.toolGroups.flatMap((g: string) => getToolNamesForGroup(g)))];
+    }
+    return undefined;
+  });
+  return { expandToolSets, getToolNamesForGroup, resolveAgentToolNames };
+});
 
 describe('AgentConfigBuilder', () => {
   let builder: AgentConfigBuilder;
