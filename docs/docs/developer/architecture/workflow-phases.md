@@ -60,6 +60,7 @@ Add a `workflowPhases` array to `experience.json`:
 | `initialAgent` | string | No | Agent key used on the first entry into this phase. Must exist in `agents`. |
 | `reentryAgent` | string | No | Authoritative override on every return — bypasses snapshot. Use sparingly. |
 | `objectives` | array | No | `{ id, description, satisfiedBy? }` items. Listed to the agent on phase entry and on user-advance requests. See [Objective marking](#objective-marking). |
+| `allowedDelegates` | string[] | No | Allowlist of agent keys that may be delegated to from this phase. Each entry must exist in `agents` (validated at load). Gates `agent.delegate` at runtime. |
 | `promptFragments` | object | No | `coldStart` / `reentry` / `afterSkip` strings injected into the system message at the matching transition. |
 | `mode` | `'interactive' \| 'build' \| 'result'` | No | Top-level surface for the phase. Defaults to `'interactive'`. See [Phase modes](#phase-modes). |
 | `buildConfig` | object | No | Options for `mode: 'build'` — `title`, `subtitle`. |
@@ -72,7 +73,14 @@ Add a `workflowPhases` array to `experience.json`:
 | `initialWorkflowPhase` | first phase | Override which phase the session starts in. Must match a declared id. |
 | `showPhaseCount` | `true` | When `false`, the strip drops `Phase N of M` and shows just the phase title. |
 
-Validation runs at config load. Unknown agent keys, duplicate phase ids, or an `initialWorkflowPhase` that doesn't match raise an error the author sees on load.
+Validation runs at config load. The author sees an error on load for any of:
+
+- duplicate phase ids;
+- an `initialWorkflowPhase` that doesn't match a declared phase;
+- an `initialAgent`, `reentryAgent`, or `allowedDelegates` entry that names an agent not present in `agents`;
+- a frontend phase-anchor agent (`initialAgent` / `reentryAgent`) whose resolved tool allowlist is missing `workflowPhase` or `finishExperience` — without those, the platform cannot drive the phase's navigation.
+
+The anchor-tool check is the structural guarantee that backs [Platform-enforced navigation](#platform-enforced-navigation): the platform can inject phase mechanics only if the anchor agent is actually permitted to call them.
 
 ## Runtime model
 
@@ -124,6 +132,16 @@ Appended to `session.events`:
 - `experience_rewound` — backward navigation cleared completion.
 
 ## Agent integration
+
+### Platform-enforced navigation
+
+Phase navigation is the platform's responsibility, not the experience author's. The vocabulary the LLM needs (`workflowPhase`, `finishExperience`, the "handoffs vs phase changes" framing) is auto-injected through the [phase-aware platform supplemental](#phase-aware-platform-supplemental) and the [workflow-phase tools](#workflow-phase-tools). Authors must **not** reimplement phase mechanics inside `promptFragments` or per-agent prompts — duplicating the vocabulary diverges from the engine and silently breaks when transition semantics change.
+
+For that injection to actually work the anchor agent has to be permitted to call the navigation tools. The trim path is easy to miss: an author restricts an anchor's `availableTools` / `toolSets` / `toolGroups`, accidentally drops `workflowPhase` or `finishExperience`, and the experience loads fine but strands the learner in the phase. The load-time anchor-tool validation listed above closes that gap.
+
+To keep the validator and the runtime in lockstep, agent tool resolution lives in a single helper — `resolveAgentToolNames` in `src/app/lib/tools/groups.ts` — used by both `AgentConfigBuilder` (which assembles the runtime allowlist) and `loadWorkflowPhases` (which validates anchors). The precedence is `availableTools` → `toolSets` → `toolGroups` → `undefined` (no restriction, anchor inherits the full registry and is exempt from the check). Backend anchors are also exempt; they never drive an interactive phase. An unresolvable `toolSet` is treated as unrestricted at validation time so the misconfiguration surfaces through the config loader's own error path rather than as a phase-load crash.
+
+The boundary is deliberate: the platform validates the *structural shape* every experience config must satisfy — phase ids, agent references, anchor-tool availability, `allowedDelegates` correctness — and applies the same rules to every experience. It does **not** lint the *contents* of any specific experience. Which voices an author allows, which prompt copy they ship, which exact tools they bundle into a custom `toolSet` — these are author-discretionary and live in `storage/<id>/`, not in the platform's invariants.
 
 ### Phase-scoped agent transfers
 
@@ -207,6 +225,8 @@ Every call site uses `void fireObjectiveSignal(...)` so the hook fires fire-and-
 
 1. **`loadWorkflowPhases`** at session/config load — symmetric checks for unknown `kind` and missing required fields (`agentType` / `slug`), throws `InvalidPhaseError` with phase id + objective id + actionable message.
 2. **`assertValidWorkflowPhasesPatch`** in `MatterCompiler.modifyExperience` — same validation runs before the build-agent's patches hit disk, preventing a malformed `satisfiedBy` from being persisted and only blowing up at next load.
+
+`loadWorkflowPhases` also runs the structural phase-navigation checks documented above: each phase's `allowedDelegates` must reference declared agents, and frontend phase-anchor agents (`initialAgent` / `reentryAgent`) must keep `workflowPhase` and `finishExperience` in their resolved tool allowlist. Backend anchors and anchors with no explicit tool restriction are exempt; an unresolvable `toolSet` reference is treated as unrestricted so the misconfiguration surfaces through the config loader's own error path. Tool resolution shares `resolveAgentToolNames` with the runtime config loader so the two cannot diverge.
 
 ### Safety net
 

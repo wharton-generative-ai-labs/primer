@@ -11,7 +11,7 @@
  * - getToolNamesForGroup() - get tool names for a group
  */
 
-import { Tool } from '@/app/lib/types';
+import { Tool, ExperienceConfig } from '@/app/lib/types';
 import { ToolRegistry } from '@/app/lib/ToolRegistry';
 import { createModuleLogger } from '@/lib/logger';
 
@@ -142,6 +142,60 @@ export function getToolsForNames(toolNames: string[]): Tool[] {
   return uniqueToolNames
     .map(name => registry.getTool(name))
     .filter((tool): tool is Tool => tool !== null);
+}
+
+/**
+ * Resolve the explicit tool-name allowlist for an agent, or `undefined` when
+ * the agent declares no restriction (and therefore inherits the full
+ * registry at runtime).
+ *
+ * This is the single source of truth for agent tool resolution. Precedence:
+ *   1. Explicit `availableTools` (legacy configVersion 1)
+ *   2. `toolSets` expansion (configVersion 2+)
+ *   3. `toolGroups` expansion (legacy, mainly backend)
+ *   4. `undefined` (no restriction)
+ *
+ * Throws (with the agent name for context) when a declared `toolSets` /
+ * `toolGroups` reference cannot be expanded, so callers see the misconfig
+ * rather than a silently-empty tool list.
+ */
+export function resolveAgentToolNames(
+  agentData: ExperienceConfig['agents'][string],
+  experienceConfig: ExperienceConfig,
+): string[] | undefined {
+  if (agentData.availableTools) {
+    return agentData.availableTools;
+  }
+
+  if (agentData.toolSets && agentData.toolSets.length > 0) {
+    try {
+      return expandToolSets(agentData.toolSets, experienceConfig.toolSets);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to expand toolSets for agent "${agentData.name}".\n` +
+        `ToolSets requested: ${JSON.stringify(agentData.toolSets)}\n` +
+        `Available custom toolSets: ${JSON.stringify(Object.keys(experienceConfig.toolSets || {}))}\n` +
+        `Error: ${errorMessage}`
+      );
+    }
+  }
+
+  if (agentData.toolGroups && agentData.toolGroups.length > 0) {
+    try {
+      const toolNames = agentData.toolGroups.flatMap(group => getToolNamesForGroup(group));
+      return [...new Set(toolNames)];
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to expand toolGroups for agent "${agentData.name}".\n` +
+        `ToolGroups requested: ${JSON.stringify(agentData.toolGroups)}\n` +
+        `Error: ${errorMessage}`
+      );
+    }
+  }
+
+  return undefined;
 }
 
 // ============================================================================

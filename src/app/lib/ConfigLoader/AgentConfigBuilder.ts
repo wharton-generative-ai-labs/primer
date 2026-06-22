@@ -7,7 +7,7 @@
 
 import { AgentConfig, ExperienceConfig } from '../types';
 import { InstructionProcessor } from './InstructionProcessor';
-import { expandToolSets, getToolNamesForGroup } from '../tools/groups';
+import { resolveAgentToolNames } from '../tools/groups';
 
 export class AgentConfigBuilder {
     private instructionProcessor: InstructionProcessor;
@@ -37,8 +37,10 @@ export class AgentConfigBuilder {
             downstreamAgents: this.buildDownstreamAgents(agentData, experienceConfig)
         };
 
-        // Compute availableTools based on configuration version and available fields
-        config.availableTools = this.computeAvailableTools(agentData, experienceConfig);
+        // Compute availableTools based on configuration version and available fields.
+        // Delegates to the shared resolver so the loader and the phase-anchor
+        // validator (loadWorkflowPhases) agree on tool resolution.
+        config.availableTools = resolveAgentToolNames(agentData, experienceConfig);
 
         // Add toolGroups if defined in the agent configuration (legacy - for backend agents)
         if (agentData.toolGroups) {
@@ -72,64 +74,6 @@ export class AgentConfigBuilder {
         }
 
         return config;
-    }
-
-    /**
-     * Compute availableTools for an agent based on the configuration.
-     * Priority order:
-     * 1. Explicit availableTools (legacy)
-     * 2. toolSets (configVersion 2+)
-     * 3. toolGroups (legacy - rarely used for frontend)
-     * 4. undefined (will fallback to all tools in useSessionManagement)
-     */
-    private computeAvailableTools(
-        agentData: ExperienceConfig['agents'][string],
-        experienceConfig: ExperienceConfig
-    ): string[] | undefined {
-        // 1. Explicit availableTools (legacy configVersion 1)
-        if (agentData.availableTools) {
-            return agentData.availableTools;
-        }
-
-        // 2. toolSets (configVersion 2+)
-        if (agentData.toolSets && agentData.toolSets.length > 0) {
-            try {
-                const toolNames = expandToolSets(
-                    agentData.toolSets,
-                    experienceConfig.toolSets
-                );
-                return toolNames;
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                throw new Error(
-                    `Failed to expand toolSets for agent "${agentData.name}".\n` +
-                    `ToolSets requested: ${JSON.stringify(agentData.toolSets)}\n` +
-                    `Available custom toolSets: ${JSON.stringify(Object.keys(experienceConfig.toolSets || {}))}\n` +
-                    `Error: ${errorMessage}`
-                );
-            }
-        }
-
-        // 3. toolGroups (legacy - mainly for backend agents, but support for frontend too)
-        if (agentData.toolGroups && agentData.toolGroups.length > 0) {
-            try {
-                const toolNames = agentData.toolGroups.flatMap(group => 
-                    getToolNamesForGroup(group)
-                );
-                return [...new Set(toolNames)]; // Deduplicate
-            } catch (error) {
-                const errorMessage = error instanceof Error ? error.message : String(error);
-                throw new Error(
-                    `Failed to expand toolGroups for agent "${agentData.name}".\n` +
-                    `ToolGroups requested: ${JSON.stringify(agentData.toolGroups)}\n` +
-                    `Error: ${errorMessage}`
-                );
-            }
-        }
-
-        // 4. No explicit tool configuration - return undefined
-        // This will cause useSessionManagement to fall back to all registered tools
-        return undefined;
     }
 
     /**
