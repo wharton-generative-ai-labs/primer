@@ -87,7 +87,7 @@
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.182.0",
     "tsx": "^4.19.2",
-    "unzipper": "^0.12.3",
+    "unzipper": "^0.12.5",
     "uuid": "^11.0.4",
     "zod": "^4.1.13",
     "typescript": "^5",
