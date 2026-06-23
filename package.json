@@ -38,7 +38,7 @@
     "@codemirror/lang-markdown": "^6.2.4",
     "@codemirror/lang-python": "^6.1.4",
     "@codemirror/language": "^6.10.1",
-    "@codemirror/state": "^6.4.1",
+    "@codemirror/state": "^6.7.0",
     "@codemirror/theme-one-dark": "^6.1.2",
     "@codemirror/view": "^6.26.3",
     "@google/genai": "^1.37.0",
