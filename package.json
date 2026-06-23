@@ -120,7 +120,7 @@
     "jest-environment-jsdom": "^29.7.0",
     "node-fetch": "^2.7.0",
     "shadcn": "^2.4.0-canary.10",
-    "ts-jest": "^29.2.6",
+    "ts-jest": "^29.4.11",
     "ts-node": "^10.9.2"
   }
 }
