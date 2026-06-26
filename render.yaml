@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: primer
+    runtime: node
+    autoDeploy: false  # Only deploy via "Deploy to Render" button, not on every push
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: OPENAI_API_KEY
+        sync: false  # User must provide during deployment
+      - key: GOOGLE_CLIENT_ID
+        sync: false  # User must provide during deployment
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false  # User must provide during deployment
+      - key: NEXTAUTH_SECRET
+        generateValue: true  # Auto-generate random secret
+      - key: NEXTAUTH_URL
+        sync: false  # User must set after deployment (e.g., https://your-app.onrender.com)
+      - key: ANTHROPIC_API_KEY
+        sync: false  # Optional
+      - key: USER_ROLE_MAPPINGS
+        sync: false  # Optional
