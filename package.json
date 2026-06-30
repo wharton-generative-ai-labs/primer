@@ -94,9 +94,9 @@
     "@tailwindcss/typography": "^0.5.16",
     "postcss": "^8",
     "socket.io-client": "^4.8.1",
-    "archiver": "^7.0.1",
+    "archiver": "^8.0.0",
     "@types/webpack": "^5.28.5",
-    "@types/archiver": "^7.0.0",
+    "@types/archiver": "^8.0.0",
     "@types/unzipper": "^0.10.10",
     "@types/three": "^0.182.0",
     "@types/react-dom": "^19.0.0"
