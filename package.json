@@ -111,7 +111,7 @@
     "@testing-library/react": "^16.3.1",
     "@testing-library/user-event": "^14.6.1",
     "@types/jest": "^29.5.14",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "eslint": "^9",
     "eslint-config-next": "15.1.4",
     "husky": "^9.0.11",
