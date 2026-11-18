@@ -699,7 +699,7 @@ Each experience can define multiple AI configurations:
   "aiConfigurations": {
     "default": {
       "provider": "openai-realtime",
-      "model": "gpt-4o-realtime-preview",
+      "model": "gpt-realtime",
       "temperature": 0.8
     },
     "backend-claude": {

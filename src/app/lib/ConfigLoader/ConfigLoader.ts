@@ -187,7 +187,7 @@ export class ConfigLoader {
                 default: {
                     provider: "openai",
                     api: "realtime",
-                    model: "gpt-4o-realtime-preview",
+                    model: "gpt-realtime",
                     streaming: true,
                     modalities: ["audio", "text"]
                 }

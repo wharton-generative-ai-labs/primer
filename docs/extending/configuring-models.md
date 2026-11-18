@@ -15,7 +15,7 @@ Every experience defines its AI setup in `experience.json` under `aiConfiguratio
   "aiConfigurations": {
     "provider": "openai",
     "api": "realtime",
-    "model": "gpt-4o-realtime-preview",
+    "model": "gpt-realtime",
     "streaming": true,
     "modalities": ["audio", "text"],
     "voice": "shimmer",

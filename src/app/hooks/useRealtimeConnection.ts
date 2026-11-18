@@ -79,7 +79,13 @@ export function useRealtimeConnection({
 
     if (!data.client_secret?.value) {
       logClientEvent(data, "error.no_ephemeral_key");
-      logger.error({ data }, 'No ephemeral key provided by the server');
+      const reason = data?.error?.message ?? (typeof data?.error === 'string' ? data.error : undefined);
+      logger.error(
+        { status: response.status, error: data?.error },
+        reason
+          ? `No ephemeral key provided by the server: ${reason}`
+          : 'No ephemeral key provided by the server'
+      );
       onStatusChange("DISCONNECTED");
       return null;
     }

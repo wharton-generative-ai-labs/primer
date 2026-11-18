@@ -253,7 +253,7 @@ You can delegate to these specialists: {{downstream_agents}}
   "aiConfigurations": {
     "default": {
       "provider": "openai-realtime",
-      "model": "gpt-4o-realtime-preview",
+      "model": "gpt-realtime",
       "temperature": 0.8,
       "apiKey": "env:OPENAI_API_KEY"
     },

@@ -308,8 +308,30 @@ describe('POST /api/session - GA Realtime client_secrets', () => {
       const response = await POST(request);
       const data = await response.json();
 
+      expect(response.status).toBe(401);
       expect(data.error).toBeDefined();
       expect(data.client_secret).toBeUndefined();
+    });
+
+    it('returns 502 when OpenAI sends an error body with a 2xx status', async () => {
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          error: { message: 'The model `x` does not exist', code: 'model_not_found' }
+        })
+      });
+
+      const request = new NextRequest('http://localhost:3000/api/session', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'x' })
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(502);
+      expect(data.error.code).toBe('model_not_found');
     });
 
     it('handles network errors with a 500', async () => {

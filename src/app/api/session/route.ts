@@ -81,6 +81,16 @@ export async function POST(request: Request) {
       }
     );
     const data = await response.json();
+
+    if (!response.ok || data?.error) {
+      const message = data?.error?.message ?? `OpenAI returned HTTP ${response.status}`;
+      logger.error(
+        { status: response.status, code: data?.error?.code, param: data?.error?.param, model },
+        `OpenAI client_secrets request failed: ${message}`
+      );
+      return NextResponse.json(data, { status: response.ok ? 502 : response.status });
+    }
+
     return NextResponse.json(normalizeEphemeralResponse(data));
   } catch (error) {
     logger.error(error, "Error in /session");

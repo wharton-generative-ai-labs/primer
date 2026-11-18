@@ -437,7 +437,9 @@ export function useHandleServerEvent({
             // normal use.
             addTranscriptToolError(
               function_request.name,
-              result.message ?? 'Tool returned error',
+              result.message
+                ?? (typeof result.data?.error === 'string' ? result.data.error : undefined)
+                ?? 'Tool returned error',
               {
                 args,
                 data: result.data,
