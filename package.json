@@ -93,7 +93,7 @@
     "typescript": "^5",
     "@tailwindcss/typography": "^0.5.16",
     "postcss": "^8",
-    "socket.io-client": "^4.8.1",
+    "socket.io-client": "^4.8.3",
     "archiver": "^7.0.1",
     "@types/webpack": "^5.28.5",
     "@types/archiver": "^7.0.0",
